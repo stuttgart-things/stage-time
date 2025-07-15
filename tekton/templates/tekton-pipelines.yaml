@@ -1,0 +1,35 @@
+{{ if .Values.enableTektonPipeline }}
+apiVersion: operator.tekton.dev/v1alpha1
+kind: TektonPipeline
+metadata:
+  name: pipeline
+spec:
+  targetNamespace: {{ .Values.defaultNamespace }}
+  await-sidecar-readiness: true
+  coschedule: workspaces
+  disable-affinity-assistant: false
+  disable-creds-init: false
+  disable-inline-spec: ""
+  disable-inline-spec: "{{ .Values.disableInlineSpec }}"
+  enable-api-fields: stable
+  enable-bundles-resolver: true
+  enable-cel-in-whenexpression: false
+  enable-cluster-resolver: true
+  enable-custom-tasks: false
+  enable-git-resolver: true
+  enable-hub-resolver: true
+  require-git-ssh-secret-known-hosts: false
+  running-in-environment-with-injected-sidecars: true
+  trusted-resources-verification-no-match-policy: ignore
+  performance:
+    disable-ha: false
+    buckets: 1
+    replicas: 1
+    threads-per-controller: 2
+    kube-api-qps: 5.0
+    kube-api-burst: 10
+  options:
+    disabled: false
+    configMaps: {}
+    deployments: {}
+{{ end }}
