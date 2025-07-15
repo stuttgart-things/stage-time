@@ -1,0 +1,9 @@
+apiVersion: v1
+data:
+  AUTOINSTALL_COMPONENTS: "{{ .Values.autoInstallComponents }}"
+  DEFAULT_TARGET_NAMESPACE: {{ .Values.defaultNamespace }}
+kind: ConfigMap
+metadata:
+  labels:
+    operator.tekton.dev/release: v0.76.0
+  name: tekton-config-defaults

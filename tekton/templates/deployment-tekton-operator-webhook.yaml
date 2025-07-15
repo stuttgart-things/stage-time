@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    operator.tekton.dev/release: v0.76.0
+    version: v0.76.0
+  name: tekton-operator-webhook
+
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: tekton-operator-webhook
+  template:
+    metadata:
+      labels:
+        app: tekton-operator
+        name: tekton-operator-webhook
+    spec:
+      containers:
+        - env:
+            - name: KUBERNETES_MIN_VERSION
+              value: v1.0.0
+            - name: SYSTEM_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: WEBHOOK_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: CONFIG_LOGGING_NAME
+              value: config-logging
+            - name: CONFIG_LEADERELECTION_NAME
+              value: tekton-operator-webhook-config-leader-election
+            - name: WEBHOOK_SERVICE_NAME
+              value: tekton-operator-webhook
+            - name: WEBHOOK_SECRET_NAME
+              value: tekton-operator-webhook-certs
+            - name: METRICS_DOMAIN
+              value: tekton.dev/operator
+          image: ghcr.io/tektoncd/operator/webhook-f2bb711aa8f0c0892856a4cbf6d9ddd8:v0.76.0@sha256:4e2186083522dd4b9c4d21cc6de3ca1c1767c1d02c6f24391356acbb6ae8aaf0
+          name: tekton-operator-webhook
+          ports:
+            - containerPort: 8443
+              name: https-webhook
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+      serviceAccountName: tekton-operator

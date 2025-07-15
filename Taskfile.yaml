@@ -7,6 +7,43 @@ vars:
     sh: if [ $(git rev-parse --abbrev-ref HEAD) != "main" ]; then echo $(git rev-parse --abbrev-ref HEAD); else echo main ; fi
 
 tasks:
+  push-chart:
+    desc: Render scm secret example
+    vars:
+      DAGGER_MODULE: github.com/stuttgart-things/dagger/helm
+      DAGGER_MODULE_VERSION: v0.24.0
+      CHART_DIR: ./tekton
+      EXPORT_DIR: /tmp/tekton.tgz
+      REGISTRY: ghcr.io
+      REPOSITORY: stuttgart-things/tekton
+      USERNAME: patrick-hermann-sva
+    cmds:
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        lint \
+        --src {{ .CHART_DIR }} \
+        -vv --progress plain
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        render \
+        --src {{ .CHART_DIR }} \
+        -vv --progress plain
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        package \
+        --src {{ .CHART_DIR }} \
+        -vv --progress plain \
+        export --path={{ .EXPORT_DIR }}
+      - |
+        dagger call -m {{ .DAGGER_MODULE }} \
+        push \
+        --src {{ .CHART_DIR }} \
+        --registry {{ .REGISTRY }} \
+        --repository {{ .REPOSITORY }} \
+        --username {{ .USERNAME }} \
+        --password env:GITHUB_TOKEN \
+        -vv --progress plain
+
   render-scm-secret:
     desc: Render scm secret example
     cmds:
@@ -64,3 +101,10 @@ tasks:
       # - gh pr checks $(gh pr list | grep "^[^#;]" | awk '{print $1}') --watch
       - gh pr merge $(gh pr list | grep "^[^#;]" | grep '{{ .BRANCH }}' | awk '{print $1}') --auto --rebase --delete-branch
       - git checkout main && git pull
+
+  do:
+    desc: Select a task to run
+    cmds:
+      - |
+        task=$(yq e '.tasks | keys' Taskfile.yaml | sed 's/^- //' | gum choose)
+        task ${task}
