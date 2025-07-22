@@ -4,7 +4,7 @@ collection of tekton pipelines building blocks
 
 ## PIPELINERUN EXAMPLES
 
-<details><summary>EXECUTE-ANSIBLE-PLAYBOOKS</summary>
+<details><summary>BUILD-IMAGE-BUILDAH</summary>
 
 ```bash
 kubectl apply -f - <<EOF
@@ -43,13 +43,13 @@ spec:
           storageClassName: openebs-hostpath
     - name: basic-auth
       secret:
-        secretName: bibi-basic-auth
+        secretName: basic-auth
     - name: dockerconfig
       secret:
-        secretName: idp-incluster
+        secretName: incluster
     - name: registries-conf
       configMap:
-        name: registries-shortnames
+        name: buildah-shortnames
   params:
     - name: git-url
       value: http://gitea.gitea.svc.cluster.local/bn_user/python-app.git
