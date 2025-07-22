@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registries-shortnames
+data:
+  000-shortnames.conf: |
+    [aliases]
+      "almalinux" = "docker.io/library/almalinux"
+      "almalinux-minimal" = "docker.io/library/almalinux-minimal"
+      # ...

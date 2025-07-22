@@ -1,0 +1,8 @@
+---
+kind: Secret
+apiVersion: v1
+data:
+  config.json: "#base64-encoded-docker-config-json"
+metadata:
+  name: idp
+type: Opaque
