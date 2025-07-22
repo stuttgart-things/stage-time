@@ -4,7 +4,67 @@ collection of tekton pipelines building blocks
 
 ## PIPELINERUN EXAMPLES
 
-<details><summary>PipelineRun</summary>
+<details><summary>EXECUTE-ANSIBLE-PLAYBOOKS</summary>
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  annotations:
+  labels:
+    tekton.dev/pipeline: build-image-buildah
+  name: build-push-image
+spec:
+  pipelineRef:
+    params:
+    - name: url
+      value: https://github.com/stuttgart-things/stage-time.git
+    - name: revision
+      value: main
+    - name: pathInRepo
+      value: pipelines/build-image-buildah.yaml
+    resolver: git
+  podTemplate:
+    securityContext:
+      fsGroup: 65532
+  workspaces:
+    - name: shared-data
+      volumeClaimTemplate:
+        metadata:
+          creationTimestamp: null
+        spec:
+          accessModes:
+          - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Mi
+          storageClassName: openebs-hostpath
+    - name: basic-auth
+      secret:
+        secretName: bibi-basic-auth
+    - name: dockerconfig
+      secret:
+        secretName: idp-incluster
+    - name: registries-conf
+      configMap:
+        name: registries-shortnames
+  params:
+    - name: git-url
+      value: http://gitea.gitea.svc.cluster.local/bn_user/python-app.git
+    - name: branch-name
+      value: main
+    - name: verify-ssl
+      value: "false"
+    - name: image-name
+      value: "registry-docker-registry.registry.svc.cluster.local:5000/python-app/my-python-app:tekton-incluster"
+EOF
+```
+
+</details>
+
+<details><summary>EXECUTE-ANSIBLE-PLAYBOOKS</summary>
 
 ```bash
 kubectl apply -f - <<EOF
@@ -100,7 +160,7 @@ spec:
           requests:
             storage: 20Mi
         storageClassName: openebs-hostpath
-EOT
+EOF
 ```
 
 </details>
