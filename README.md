@@ -1,6 +1,6 @@
 # stuttgart-things/stage-time
 
-collection of tekton pipeline building blocks.
+collection of tekton pipeline building blocks
 
 ## PIPELINERUN EXAMPLES
 
