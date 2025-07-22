@@ -11,7 +11,7 @@ spec:
   disable-creds-init: false
   disable-inline-spec: ""
   disable-inline-spec: "{{ .Values.disableInlineSpec }}"
-  enable-api-fields: stable
+  enable-api-fields: {{ .Values.enableApiFields }}
   enable-bundles-resolver: true
   enable-cel-in-whenexpression: false
   enable-cluster-resolver: true

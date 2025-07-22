@@ -1,6 +1,6 @@
 # stuttgart-things/stage-time
 
-collection of tekton pipelines building blocks
+collection of tekton pipeline building blocks.
 
 ## PIPELINERUN EXAMPLES
 
@@ -9,7 +9,7 @@ collection of tekton pipelines building blocks
 ```bash
 kubectl apply -f - <<EOF
 ---
-apiVersion: tekton.dev/v1beta1
+apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
   annotations:
@@ -26,9 +26,6 @@ spec:
     - name: pathInRepo
       value: pipelines/build-image-buildah.yaml
     resolver: git
-  podTemplate:
-    securityContext:
-      fsGroup: 65532
   workspaces:
     - name: shared-data
       volumeClaimTemplate:
@@ -161,6 +158,27 @@ spec:
             storage: 20Mi
         storageClassName: openebs-hostpath
 EOF
+```
+
+</details>
+
+## SNIPPETS
+
+<details><summary>FEATURE GATE TO BE "ALPHA" OR "BETA"</summary>
+
+```bash
+validation.webhook.pipeline.tekton.dev" denied the request: validation failed: resolver params requires "enable-api-fields" feature gate to be "alpha" or "beta" but it is "stable":
+```
+
+```bash
+kubectl edit configmap feature-flags -n tekton-pipelines
+
+# Change the enable-api-fields field to beta:
+#data:
+#  enable-api-fields: "beta"
+
+kubectl rollout restart deployment tekton-pipelines-controller -n tekton-pipelines
+kubectl rollout restart deployment tekton-pipelines-webhook -n tekton-pipelines
 ```
 
 </details>

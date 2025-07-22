@@ -4,3 +4,4 @@ defaultNamespace: tekton-pipelines
 imagePullPolicy: Always
 disableInlineSpec: "" # pipeline,pipelinerun,taskrun
 enableTektonPipeline: true
+enableApiFields: beta #stable
