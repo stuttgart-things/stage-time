@@ -1,0 +1,13 @@
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: mount-nfs-share-run
+spec:
+  taskRef:
+    name: mount-nfs-share
+  params:
+    - name: nfs-host
+      value: 10.100.136.150
+    - name: nfs-path
+      value: /srv/nfs/kubedata
