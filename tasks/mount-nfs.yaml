@@ -1,0 +1,32 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: mount-nfs
+spec:
+  description: Mount an NFS share using host and path passed as parameters.
+  params:
+    - name: nfs-host
+      description: The NFS server hostname
+      type: string
+    - name: nfs-path
+      description: The exported share path on the NFS server
+      type: string
+  steps:
+    - name: mount-nfs
+      image: d3fk/nfs-client:v4
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        privileged: true
+      script: |
+        #!/bin/sh
+        set -e
+
+        echo "Creating mount point..."
+        mkdir -p /mnt/nfs
+
+        echo "Mounting NFS share from $(params.nfs-host):$(params.nfs-path)..."
+        mount -t nfs $(params.nfs-host):$(params.nfs-path) /mnt/nfs
+
+        echo "Contents of mounted NFS share:"
+        ls -al /mnt/nfs
