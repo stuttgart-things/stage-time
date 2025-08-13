@@ -1,0 +1,9 @@
+{{ if .Values.enableTektonTrigger }}
+---
+apiVersion: operator.tekton.dev/v1alpha1
+kind: TektonTrigger
+metadata:
+  name: trigger
+spec:
+  targetNamespace: {{ .Values.defaultNamespace }}
+{{ end }}
