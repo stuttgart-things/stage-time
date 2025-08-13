@@ -29,7 +29,7 @@ spec:
     - name: REPO_FULL_NAME
       value: "gitea_admin/source"
     - name: COMMIT_SHA
-      value: "80b8528fcea3c0ca416732c455b6dd30f9da49d4" # pragma: allowlist secret
+      value: "80b8528fcea3c0ca416732c455b6dd30f9da49d4" #pragma: allowlist secret
     - name: STATE
       value: "success" # or failure, pending, warning, error
     - name: DESCRIPTION
