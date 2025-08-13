@@ -1,0 +1,25 @@
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: gitea-set-status-test
+spec:
+  taskRef:
+    name: gitea-set-status
+  params:
+    - name: GITEA_PROTOCOL
+      value: "http"
+    - name: GITEA_HOST
+      value: "10.100.136.150:30083"
+    - name: REPO_FULL_NAME
+      value: "gitea_admin/source"
+    - name: COMMIT_SHA
+      value: "80b8528fcea3c0ca416732c455b6dd30f9da49d4"
+    - name: STATE
+      value: "success"
+    - name: DESCRIPTION
+      value: "Test commit status from Tekton"
+    - name: GITEA_TOKEN_SECRET_NAME
+      value: "gitea"
+    - name: GITEA_TOKEN_SECRET_KEY
+      value: "token"
