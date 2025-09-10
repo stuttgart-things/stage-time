@@ -5,4 +5,5 @@ imagePullPolicy: Always
 disableInlineSpec: "" # pipeline,pipelinerun,taskrun
 enableTektonPipeline: true
 enableTektonTrigger: false
+enableTektonDashboard: false
 enableApiFields: beta #stable

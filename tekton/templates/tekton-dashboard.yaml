@@ -1,0 +1,9 @@
+{{ if .Values.enableTektonDashboard }}
+---
+apiVersion: operator.tekton.dev/v1alpha1
+kind: TektonDashboard
+metadata:
+  name: dashboard
+spec:
+  targetNamespace: {{ .Values.defaultNamespace }}
+{{ end }}

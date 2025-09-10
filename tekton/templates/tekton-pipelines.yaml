@@ -1,4 +1,5 @@
 {{ if .Values.enableTektonPipeline }}
+---
 apiVersion: operator.tekton.dev/v1alpha1
 kind: TektonPipeline
 metadata:
@@ -9,7 +10,6 @@ spec:
   coschedule: workspaces
   disable-affinity-assistant: false
   disable-creds-init: false
-  disable-inline-spec: ""
   disable-inline-spec: "{{ .Values.disableInlineSpec }}"
   enable-api-fields: {{ .Values.enableApiFields }}
   enable-bundles-resolver: true
