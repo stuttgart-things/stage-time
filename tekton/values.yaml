@@ -7,3 +7,17 @@ enableTektonPipeline: true
 enableTektonTrigger: false
 enableTektonDashboard: false
 enableApiFields: beta #stable
+
+tektonPruner:
+# With this, the pruner will run daily, keep the 5 most recent runs, and delete older ones automatically.
+  enabled: true
+  name: pruner
+  targetNamespace: tekton-pipelines
+  keep: 5
+  resources:
+    - pipelineRuns
+    - taskRuns
+  schedule: "0 0 * * *"
+  serviceAccountName: tekton-pruner
+  labels:
+    app: tekton-pruner

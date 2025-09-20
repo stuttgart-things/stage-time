@@ -7,7 +7,7 @@ metadata:
     operator.tekton.dev/release: devel
     version: devel
   name: tekton-operator-webhook
-
+  namespace: tekton-operator
 spec:
   ports:
     - name: https-webhook

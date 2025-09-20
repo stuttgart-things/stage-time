@@ -1,0 +1,19 @@
+{{- if .Values.tektonPruner.enabled }}
+---
+apiVersion: operator.tekton.dev/v1alpha1
+kind: TektonPruner
+metadata:
+  name: {{ default "pruner" .Values.tektonPruner.name }}
+spec:
+  disabled: {{ not .Values.tektonPruner.enabled }}       # Disable if not enabled
+  targetNamespace: {{ default "tekton-pipelines" .Values.tektonPruner.targetNamespace }}
+  keep: {{ default 5 .Values.tektonPruner.keep }}
+  resources:
+    {{- range .Values.tektonPruner.resources }}
+    - {{ . }}
+    {{- end }}
+  schedule: {{ default "0 0 * * *" .Values.tektonPruner.schedule }}
+  serviceAccountName: {{ default "tekton-pruner" .Values.tektonPruner.serviceAccountName }}
+  labels:
+    app: {{ default "tekton-pruner" .Values.tektonPruner.labels.app }}
+{{- end }}
