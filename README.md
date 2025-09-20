@@ -2,6 +2,20 @@
 
 collection of tekton pipeline building blocks
 
+## DEPLOY TEKTON
+
+<details><summary>OPERATOR+PIPELINES</summary>
+
+```bash
+helm upgrade --install tekton \
+-n tekton-operator \
+--create-namespace
+oci://ghcr.io/stuttgart-things/tekton/tekton
+--version 0.77.0
+```
+
+</details>
+
 ## PIPELINERUN EXAMPLES
 
 <details><summary>BUILD-IMAGE-BUILDAH</summary>
@@ -162,7 +176,23 @@ EOF
 
 </details>
 
-## SNIPPETS
+## DEV
+
+<details><summary>TEST CHART w/ VCLUSTER</summary>
+
+```bash
+helm upgrade --install tekton-vcluster \
+vcluster --repo https://charts.loft.sh \
+--namespace vcluster \
+--repository-config='' \
+--create-namespace
+
+vcluster connect tekton-chart-release -n vcluster
+```
+
+</details>
+
+## USUAGE SNIPPETS
 
 <details><summary>FEATURE GATE TO BE "ALPHA" OR "BETA"</summary>
 

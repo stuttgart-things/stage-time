@@ -34,3 +34,4 @@ metadata:
   labels:
     app.kubernetes.io/instance: default
   name: tekton-config-observability
+  namespace: tekton-operator
