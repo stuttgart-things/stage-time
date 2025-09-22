@@ -6,3 +6,6 @@ disableInlineSpec: "{{ .Values.disableInlineSpec }}"
 enableTektonPipeline: {{ .Values.enableTektonPipeline }}
 enableTektonTrigger: {{ .Values.enableTektonTrigger }}
 enableTektonDashboard: {{ .Values.enableTektonDashboard }}
+
+tektonPruner:
+  enabled: {{ .Values.enableTektonPruner }}

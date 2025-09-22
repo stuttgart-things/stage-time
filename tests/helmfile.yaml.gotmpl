@@ -9,8 +9,9 @@ environments:
       - imagePullPolicy: Always
       - disableInlineSpec: ""
       - enableTektonPipeline: true
-      - enableTektonTrigger: false
-      - enableTektonDashboard: false
+      - enableTektonTrigger: true
+      - enableTektonDashboard: true
+      - enableTektonPruner: true
 ---
 releases:
   - name: tekton

@@ -92,6 +92,27 @@ tasks:
         fi
         git push origin -u {{ .BRANCH }}
 
+  vcluster:
+    desc: Create/Destory vcluster
+    cmds:
+      - vcluster disconnect || echo "no vcluster connected"
+      - helmfile {{ .OPERATION }} -f tests/vcluster.yaml
+      - |
+        if [ "{{ .OPERATION }}" = "apply" ]; then
+          vcluster connect {{ .VCLUSTER_NAME }} -n {{ .VCLUSTER_NAMESPACE }}
+          kubectl get namespace
+        fi
+    env:
+      VCLUSTER_NAME: "{{ .VCLUSTER_NAME }}"
+      VCLUSTER_NAMESPACE: "{{ .VCLUSTER_NAMESPACE }}"
+    vars:
+      OPERATION:
+        sh: gum choose "apply" "destroy" --header="Apply or destroy vcluster?"
+      VCLUSTER_NAME:
+        sh: gum input --placeholder "Enter vcluster name"
+      VCLUSTER_NAMESPACE:
+        sh: gum input --placeholder "Enter vcluster namespace"
+
   pr:
     desc: Create pull request into main
     cmds:
