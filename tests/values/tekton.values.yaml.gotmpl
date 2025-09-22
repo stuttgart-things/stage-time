@@ -1,0 +1,8 @@
+---
+autoInstallComponents: {{ .Values.autoInstallComponents }}
+defaultNamespace: {{ .Values.pipelineNamespace }}
+imagePullPolicy: {{ .Values.imagePullPolicy }}
+disableInlineSpec: "{{ .Values.disableInlineSpec }}"
+enableTektonPipeline: {{ .Values.enableTektonPipeline }}
+enableTektonTrigger: {{ .Values.enableTektonTrigger }}
+enableTektonDashboard: {{ .Values.enableTektonDashboard }}
