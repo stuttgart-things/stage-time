@@ -102,6 +102,16 @@ tasks:
       - gh pr merge $(gh pr list | grep "^[^#;]" | grep '{{ .BRANCH }}' | awk '{print $1}') --auto --rebase --delete-branch
       - git checkout main && git pull
 
+  render-chart:
+    desc: Render tekton helm chart
+    cmds:
+      - |
+        dagger call -m https://github.com/stuttgart-things/dagger/helm@v0.33.0 \
+        helmfile-operation --operation template \
+        --src . --helmfile-name tests/helmfile.yaml.gotmpl \
+        #--kube-config file://~/.kube/labda-sthings-infra \
+        -vv --progress plain
+
   do:
     desc: Select a task to run
     cmds:
