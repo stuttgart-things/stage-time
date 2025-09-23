@@ -9,8 +9,8 @@ collection of tekton pipeline building blocks
 ```bash
 helm upgrade --install tekton \
 -n tekton-operator \
---create-namespace
-oci://ghcr.io/stuttgart-things/tekton/tekton
+--create-namespace \
+oci://ghcr.io/stuttgart-things/tekton/tekton \
 --version 0.77.0
 ```
 
