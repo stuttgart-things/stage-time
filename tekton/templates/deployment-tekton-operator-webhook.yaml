@@ -39,7 +39,8 @@ spec:
               value: tekton-operator-webhook-certs
             - name: METRICS_DOMAIN
               value: tekton.dev/operator
-          image: ghcr.io/tektoncd/operator/webhook-f2bb711aa8f0c0892856a4cbf6d9ddd8:v0.77.0@sha256:2ff0f77da9c59f31654acb11dea94649792f084683f1f1d44b5980407b9de6ca
+          image: "{{ .Values.image.webhook.repository }}:{{ .Values.image.webhook.tag }}{{- if .Values.image.webhook.digest }}@{{ .Values.image.webhook.digest }}{{- end }}"
+          imagePullPolicy: {{ .Values.imagePullPolicy }}
           name: tekton-operator-webhook
           ports:
             - containerPort: 8443

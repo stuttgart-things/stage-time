@@ -58,7 +58,7 @@ spec:
                 configMapKeyRef:
                   key: DEFAULT_TARGET_NAMESPACE
                   name: tekton-config-defaults
-          image: ghcr.io/tektoncd/operator/operator-303303c315a48490ba6517859ef65b77:v0.77.0@sha256:821eb72cdcdf31c9413b71f853cebe63fe70fd1bb8640fe2db498a8e676970fa
+          image: "{{ .Values.image.operator.repository }}:{{ .Values.image.operator.tag }}{{- if .Values.image.operator.digest }}@{{ .Values.image.operator.digest }}{{- end }}"
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           name: tekton-operator-lifecycle
           securityContext:
