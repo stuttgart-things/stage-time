@@ -12,11 +12,17 @@ image:
   operator:
     repository: ghcr.io/tektoncd/operator/operator-303303c315a48490ba6517859ef65b77
     tag: v0.77.0
-    digest: sha256:821eb72cdcdf31c9413b71f853cebe63fe70fd1bb8640fe2db498a8e676970fa
+    #digest: sha256:821eb72cdcdf31c9413b71f853cebe63fe70fd1bb8640fe2db498a8e676970fa
   webhook:
     repository: ghcr.io/tektoncd/operator/webhook-f2bb711aa8f0c0892856a4cbf6d9ddd8
     tag: v0.77.0
-    digest: sha256:2ff0f77da9c59f31654acb11dea94649792f084683f1f1d44b5980407b9de6ca
+    #digest: sha256:2ff0f77da9c59f31654acb11dea94649792f084683f1f1d44b5980407b9de6ca
+
+extraEnvOperatorLifecycle:
+  - name: IMAGE_PIPELINES_PROXY
+    value: ghcr.io/tektoncd/operator/proxy-webhook-f6167da7bc41b96a27c5529f850e63d1:v0.77.0@sha256:ae7240e5c0683fd513de469d59400010d8b0ecdb946eeffbf0b15a5fe6540faf
+  - name: IMAGE_JOB_PRUNER_TKN
+    value: ghcr.io/tektoncd/plumbing/tkn@sha256:233de6c8b8583a34c2379fa98d42dba739146c9336e8d41b66030484357481ed
 
 tektonPruner:
 # With this, the pruner will run daily, keep the 5 most recent runs, and delete older ones automatically.
