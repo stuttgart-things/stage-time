@@ -26,7 +26,7 @@ extraEnvOperatorLifecycle:
 
 tektonPruner:
 # With this, the pruner will run daily, keep the 5 most recent runs, and delete older ones automatically.
-  enabled: true
+  enabled: false
   name: pruner
   targetNamespace: tekton-pipelines
   keep: 5
