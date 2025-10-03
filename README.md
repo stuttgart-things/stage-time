@@ -79,6 +79,44 @@ EOF
 
 <details><summary>EXECUTE-ANSIBLE-PLAYBOOKS</summary>
 
+## CREATE SSH USER-CREDS AS SECRET
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ansible-credentials
+  namespace: tekton-ci
+type: Opaque
+stringData:
+  ANSIBLE_USER: ""
+  ANSIBLE_PASSWORD: ""
+EOF
+```
+
+## CREATE SSH USER-CREDS AS SECRET
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault
+  namespace: tekton-ci
+type: Opaque
+stringData:
+  VAULT_NAMESPACE: root
+  VAULT_ROLE_ID: ""
+  VAULT_SECRET_ID: ""
+  VAULT_ADDR: ""
+EOF
+```
+
+## PIPELINERUN
+
 ```bash
 kubectl apply -f - <<EOF
 ---
@@ -89,7 +127,7 @@ metadata:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
   name: monday51
-  namespace: tekton-pipelines
+  namespace: tekton-ci
 spec:
   params:
   - name: ansibleWorkingImage

@@ -5,14 +5,14 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: ansible3
+  name: ansible7
   namespace: tekton-ci
 spec:
   params:
   - name: ansibleWorkingImage
     value: ghcr.io/stuttgart-things/sthings-ansible:11.0.0
   - name: createInventory
-    value: "true"
+    value: "false"
   - name: ansibleTargetHost
     value: all
   - name: gitRepoUrl
@@ -23,8 +23,8 @@ spec:
     value: /ansible/workdir/
   - name: vaultSecretName
     value: vault
-  #- name: inventory
-  #  value: W2luaXRpYWxfbWFzdGVyX25vZGVdCjEwLjMxLjEwMy40MwoKW2FkZGl0aW9uYWxfbWFzdGVyX25vZGVzXQo=
+  - name: inventory
+    value: MTAuMzEuMTAzLjI3Cg==
   - name: installExtraRoles
     value: "true"
   - name: ansibleExtraRoles
@@ -35,8 +35,8 @@ spec:
     - https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06
   - name: ansiblePlaybooks
     value:
-    - sthings.baseos.prepare-env
-    - sthings.baseos.setup
+      #- sthings.baseos.prepare_env
+      - sthings.baseos.setup
   - name: ansibleVarsFile
     value:
     - manage_filesystem+-true
