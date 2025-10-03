@@ -7,3 +7,11 @@ default_params = {
     vaultSecretName = "vault" # pragma: allowlist secret
     installExtraRoles = "true"
 }
+
+task_run_template = {
+    serviceAccountName = "default"
+}
+
+timeouts = {
+  pipeline = "1h0m0s"
+}

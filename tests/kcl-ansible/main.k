@@ -20,5 +20,9 @@ tekton.PipelineRun {
         params = [
             {name = k, value = v} for k, v in vars.pipeline_params
         ]
+        taskRunTemplate = vars.task_run_template
+        timeouts = vars.timeouts
+        workspaces = [vars.workspace_config]
+
     }
 }
