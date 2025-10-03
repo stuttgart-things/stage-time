@@ -74,7 +74,7 @@ spec:
       type: string
       default: "eu.gcr.io/stuttgart-things/sthings-ansible:11.0.0"
     - name: vault-secret-key-addr
-      description: vaul addr key in the secret
+      description: vault addr key in the secret
       type: string
       default: "VAULT_ADDR"
     - name: vault-secret-key-approleId
@@ -93,13 +93,23 @@ spec:
       description: name of the vault secret
       type: string
       default: "vault"
+    # Add new parameters for ansible credentials secret
+    - name: ansible-credentials-secret-name
+      description: name of the secret containing ansible credentials
+      type: string
+      default: "ansible-credentials"
+    - name: ansible-credentials-user-key
+      description: key for ansible user in the secret
+      type: string
+      default: "ANSIBLE_USER"
+    - name: ansible-credentials-password-key
+      description: key for ansible password in the secret
+      type: string
+      default: "ANSIBLE_PASSWORD"
   stepTemplate:
     workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
     image: "$(params.WORKING_IMAGE)"
     securityContext:
-      # privileged: true
-      # runAsNonRoot: false
-      # runAsUser: 0
       privileged: false
       runAsNonRoot: true
       runAsUser: 65532
@@ -237,6 +247,19 @@ spec:
           value: "False"
         - name: HOME
           value: $(params.USER_HOME)
+        # Add ANSIBLE_USER and ANSIBLE_PASSWORD from secret
+        - name: ANSIBLE_USER
+          valueFrom:
+            secretKeyRef:
+              name: $(params.ansible-credentials-secret-name)
+              key: $(params.ansible-credentials-user-key)
+              optional: true
+        - name: ANSIBLE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: $(params.ansible-credentials-secret-name)
+              key: $(params.ansible-credentials-password-key)
+              optional: true
         - name: VAULT_ADDR
           valueFrom:
             secretKeyRef:
@@ -271,6 +294,13 @@ spec:
 
         echo "YOU KNOW.. FOR RUNNING A PLAYBOOK OR 2"
 
+        # Build extra vars string conditionally using lookup approach
+        EXTRA_VARS=""
+        if [ -n "${ANSIBLE_USER:-}" ] && [ -n "${ANSIBLE_PASSWORD:-}" ]; then
+            EXTRA_VARS="$EXTRA_VARS -e ansible_user='{{ lookup(\"env\", \"ANSIBLE_USER\") }}'"
+            EXTRA_VARS="$EXTRA_VARS -e ansible_password='{{ lookup(\"env\", \"ANSIBLE_PASSWORD\") }}'"
+        fi
+
         for playbook in "$@"
         do
           ansible-playbook -vv \
@@ -278,5 +308,6 @@ spec:
           -e inv_path=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory \
           -e target_host=$(params.TARGET_HOST) \
           -e path_to_vars_file=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars \
+          $EXTRA_VARS \
           $playbook
         done

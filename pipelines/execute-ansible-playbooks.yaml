@@ -81,6 +81,19 @@ spec:
       type: string
       default: "/home/nonroot"
       description: absolute path to the user's home directory
+    # Add new parameters for ansible credentials secret
+    - name: ansibleCredentialsSecretName
+      type: string
+      default: "ansible-credentials"
+      description: name of the secret containing ansible credentials
+    - name: ansibleCredentialsUserKey
+      type: string
+      default: "ANSIBLE_USER"
+      description: key for ansible user in the secret
+    - name: ansibleCredentialsPasswordKey
+      type: string
+      default: "ANSIBLE_PASSWORD"
+      description: key for ansible password in the secret
   tasks:
     - name: execute-ansible
       runAfter:
@@ -128,6 +141,13 @@ spec:
           value: $(params.ansibleWorkingImage)
         - name: vault-secret-name
           value: $(params.vaultSecretName)
+        # Add the new parameters for ansible credentials
+        - name: ansible-credentials-secret-name
+          value: $(params.ansibleCredentialsSecretName)
+        - name: ansible-credentials-user-key
+          value: $(params.ansibleCredentialsUserKey)
+        - name: ansible-credentials-password-key
+          value: $(params.ansibleCredentialsPasswordKey)
     - name: fetch-repository
       taskRef:
         resolver: git

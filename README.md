@@ -88,7 +88,7 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: monday5
+  name: monday51
   namespace: tekton-pipelines
 spec:
   params:
