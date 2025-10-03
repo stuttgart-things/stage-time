@@ -88,7 +88,7 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: monday5-9
+  name: monday5
   namespace: tekton-pipelines
 spec:
   params:
@@ -106,8 +106,8 @@ spec:
     value: /ansible/workdir/
   - name: vaultSecretName
     value: vault
-  - name: inventory
-    value: W2luaXRpYWxfbWFzdGVyX25vZGVdCjEwLjMxLjEwMy40MwoKW2FkZGl0aW9uYWxfbWFzdGVyX25vZGVzXQo=
+  #- name: inventory
+  #  value: W2luaXRpYWxfbWFzdGVyX25vZGVdCjEwLjMxLjEwMy40MwoKW2FkZGl0aW9uYWxfbWFzdGVyX25vZGVzXQo=
   - name: installExtraRoles
     value: "true"
   - name: ansibleExtraRoles
