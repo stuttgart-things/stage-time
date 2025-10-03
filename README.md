@@ -52,24 +52,24 @@ spec:
             requests:
               storage: 50Mi
           storageClassName: openebs-hostpath
-    - name: basic-auth
-      secret:
-        secretName: basic-auth
-    - name: dockerconfig
-      secret:
-        secretName: incluster
+    # - name: basic-auth
+    #   secret:
+    #     secretName: basic-auth
+    # - name: dockerconfig
+    #   secret:
+    #     secretName: incluster
     - name: registries-conf
       configMap:
         name: buildah-shortnames
   params:
     - name: git-url
-      value: http://gitea.gitea.svc.cluster.local/bn_user/python-app.git
+      value: https://github.com/patrickloeber/python-docker-tutorial
     - name: branch-name
       value: main
     - name: verify-ssl
       value: "false"
     - name: image-name
-      value: "registry-docker-registry.registry.svc.cluster.local:5000/python-app/my-python-app:tekton-incluster"
+      value: "ttl.sh/python:v1"
 EOF
 ```
 
