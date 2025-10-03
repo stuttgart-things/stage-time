@@ -5,7 +5,7 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: ansible2
+  name: ansible3
   namespace: tekton-ci
 spec:
   params:
@@ -35,8 +35,8 @@ spec:
     - https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06
   - name: ansiblePlaybooks
     value:
-    - ansible/playbooks/prepare-env.yaml
-    - ansible/playbooks/base-os.yaml
+    - sthings.baseos.prepare-env
+    - sthings.baseos.setup
   - name: ansibleVarsFile
     value:
     - manage_filesystem+-true
@@ -63,6 +63,10 @@ spec:
     - awx.awx:24.6.1
     - community.hashi_vault:6.2.0
     - ansible.netcommon:7.1.0
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-container-25.0.286.tar.gz/sthings-container-25.0.286.tar.gz
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.6.990.tar.gz/sthings-baseos-25.6.990.tar.gz
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-awx-25.4.506.tar.gz/sthings-awx-25.4.506.tar.gz
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-rke-25.6.394.tar.gz/sthings-rke-25.6.394.tar.gz
   - name: installExtraCollections
     value: "true"
   pipelineRef:

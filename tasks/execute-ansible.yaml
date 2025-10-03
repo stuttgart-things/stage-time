@@ -294,11 +294,11 @@ spec:
 
         echo "YOU KNOW.. FOR RUNNING A PLAYBOOK OR 2"
 
-        # Build extra vars string conditionally using lookup approach
+        # Build extra vars string conditionally using environment variables directly
         EXTRA_VARS=""
         if [ -n "${ANSIBLE_USER:-}" ] && [ -n "${ANSIBLE_PASSWORD:-}" ]; then
-            EXTRA_VARS="$EXTRA_VARS -e ansible_user='{{ lookup(\"env\", \"ANSIBLE_USER\") }}'"
-            EXTRA_VARS="$EXTRA_VARS -e ansible_password='{{ lookup(\"env\", \"ANSIBLE_PASSWORD\") }}'"
+            EXTRA_VARS="$EXTRA_VARS -e ansible_user='${ANSIBLE_USER}'"
+            EXTRA_VARS="$EXTRA_VARS -e ansible_password='${ANSIBLE_PASSWORD}'"
         fi
 
         for playbook in "$@"
