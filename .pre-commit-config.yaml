@@ -18,6 +18,21 @@ repos:
           - DL4006
           - --ignore
           - DL3015
+          - --ignore
+          - DL4006   # Use absolute WORKDIR
+          - --ignore
+          - DL3015   # Use ADD instead of COPY
+          - --ignore
+          - DL3018   # Pin versions in apk add
+          - --ignore
+          - DL4001   # Either use Wget or Curl but not both
+          - --ignore
+          - DL3042   # Avoid pip cache dir
+          - --ignore
+          - DL3013   # Pin versions in pip
+          - --ignore
+          - DL3002   # Last USER should not be root
+
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.30.0
     hooks:
