@@ -32,7 +32,6 @@ repos:
           - DL3013   # Pin versions in pip
           - --ignore
           - DL3002   # Last USER should not be root
-
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.30.0
     hooks:
