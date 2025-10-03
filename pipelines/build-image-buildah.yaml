@@ -19,6 +19,18 @@ spec:
       type: string
       default: "true"
       description: Delete existing content
+    - name: context
+      type: string
+      default: .
+      description: The build context (directory).
+    - name: dockerfile
+      type: string
+      default: ./Dockerfile
+      description: The path to the Dockerfile.
+    - name: storage-driver
+      type: string
+      default: overlay
+      description: The storage driver to use.
     - name: image-name
       type: string
       description: Image name for Buildah to build and push
@@ -90,3 +102,9 @@ spec:
           value: "$(params.image-name)"
         - name: TLSVERIFY
           value: $(params.verify-ssl)
+        - name: CONTEXT
+          value: $(params.context)
+        - name: DOCKERFILE
+          value: $(params.dockerfile)
+        - name: STORAGE_DRIVER
+          value: $(params.storage-driver)

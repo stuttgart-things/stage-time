@@ -58,9 +58,9 @@ spec:
     # - name: dockerconfig
     #   secret:
     #     secretName: incluster
-    - name: registries-conf
-      configMap:
-        name: buildah-shortnames
+    # - name: registries-conf
+    #   configMap:
+    #     name: buildah-shortnames
   params:
     - name: git-url
       value: https://github.com/patrickloeber/python-docker-tutorial
