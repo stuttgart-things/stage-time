@@ -89,11 +89,11 @@ spec:
         resolver: git
         params:
           - name: url
-            value: https://github.com/stuttgart-things/stage-time.git
+            value: https://github.com/tektoncd/catalog.git
           - name: revision
             value: main
           - name: pathInRepo
-            value: tasks/execute-ansible.yaml
+            value: task/git-clone/0.10/git-clone.yaml
       workspaces:
         - name: source
           workspace: shared-workspace

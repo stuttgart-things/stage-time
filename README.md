@@ -18,7 +18,7 @@ oci://ghcr.io/stuttgart-things/tekton/tekton \
 
 ## PIPELINERUN EXAMPLES
 
-<details><summary>BUILD-IMAGE-BUILDAH</summary>
+<details><summary>BUILD CONTAINER-IMAGE w/BUILDAH (w/o GIT/REG SECRETS)</summary>
 
 ```bash
 kubectl apply -f - <<EOF
@@ -70,6 +70,8 @@ spec:
       value: "false"
     - name: image-name
       value: "ttl.sh/python:v1"
+    - name: context
+      value: example1
 EOF
 ```
 
@@ -93,7 +95,7 @@ spec:
   - name: ansibleWorkingImage
     value: ghcr.io/stuttgart-things/sthings-ansible:11.0.0
   - name: createInventory
-    value: "false"
+    value: "true"
   - name: ansibleTargetHost
     value: all
   - name: gitRepoUrl
@@ -132,7 +134,7 @@ spec:
     - reboot_all+-false
   - name: ansibleVarsInventory
     value:
-    - all+["10.31.103.43"]
+    - all+["10.31.103.27"]
   - name: ansibleExtraCollections
     value:
     - community.crypto:2.22.3
