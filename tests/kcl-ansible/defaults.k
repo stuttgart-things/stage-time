@@ -1,5 +1,5 @@
 # Default pipeline parameters
-default_params = {
+_default_params = {
     ansibleWorkingImage = "ghcr.io/stuttgart-things/sthings-ansible:11.0.0"
     createInventory = "false"
     ansibleTargetHost = "all"
@@ -8,10 +8,10 @@ default_params = {
     installExtraRoles = "true"
 }
 
-task_run_template = {
+_task_run_template = {
     serviceAccountName = "default"
 }
 
-timeouts = {
+_timeouts = {
   pipeline = "1h0m0s"
 }

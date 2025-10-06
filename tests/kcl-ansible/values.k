@@ -1,5 +1,5 @@
 # Environment-specific overrides
-override_params = {
+_override_params = {
     ansibleWorkingImage = "ghcr.io/stuttgart-things/sthings-ansible:12.0.0"
     gitRepoUrl = "https://github.com/stuttgart-things/stage-time.git"
     gitRevision = "main"
