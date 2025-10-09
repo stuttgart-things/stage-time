@@ -1,15 +1,24 @@
 import .schema
 
 # Environment-specific overrides with defaults
-_ansibleWorkingImage = option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:12.0.0"
+_ansibleWorkingImage = option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.0.0"
 _gitRepoUrl = option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
 _gitRevision = option("gitRevision") or "main"
 _inventory = option("inventory") or "MTAuMzEuMTAzLjI3Cg=="
 _ansibleExtraRoles = option("ansibleExtraRoles") or [
     "https://github.com/stuttgart-things/install-requirements.git,2024.05.11"
-    "https://github.com/stuttgart-things/manage-filesystem.git,2024.06.07"
-    "https://github.com/stuttgart-things/install-configure-vault.git"
-    "https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06"
+]
+
+_ansibleExtraCollections = option("ansibleExtraCollections") or [
+    "community.crypto:2.22.3"
+    "community.general:10.1.0"
+    "ansible.posix:2.0.0"
+    "kubernetes.core:5.0.0"
+]
+
+_ansiblePlaybooks = option("ansiblePlaybooks") or [
+    "sthings.baseos.prepare_env"
+    "sthings.baseos.setup"
 ]
 
 # Inline validation for immediate feedback
@@ -27,6 +36,8 @@ _override_params = {
     gitRevision = _gitRevision
     inventory = _inventory
     ansibleExtraRoles = _ansibleExtraRoles
+    ansiblePlaybooks = _ansiblePlaybooks
+    ansibleExtraCollections = _ansibleExtraCollections
 }
 
 # Still validate against schema for completeness

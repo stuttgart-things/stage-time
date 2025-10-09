@@ -7,6 +7,8 @@ schema PipelineOverrides:
     gitRevision?: str
     inventory?: str
     ansibleExtraRoles?: [str]
+    ansiblePlaybooks?: [str]
+    ansibleExtraCollections?: [str]
 
     check:
         # Validate image format - use boolean OR
