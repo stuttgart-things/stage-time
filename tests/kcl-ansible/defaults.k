@@ -5,6 +5,7 @@ _default_params = {
     gitWorkspaceSubdirectory = "/ansible/workdir/"
     vaultSecretName = "vault" # pragma: allowlist secret
     installExtraRoles = "true"
+    installExtraCollections = "true"
 }
 
 _task_run_template = {
