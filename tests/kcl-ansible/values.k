@@ -1,7 +1,7 @@
 import .schema
 
 # Environment-specific overrides with defaults
-_ansibleWorkingImage = option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.0.0"
+_ansibleWorkingImage = option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:12.0.0"
 _gitRepoUrl = option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
 _gitRevision = option("gitRevision") or "main"
 _inventory = option("inventory") or "MTAuMzEuMTAzLjI3Cg=="
