@@ -15,8 +15,8 @@ schema PipelineOverrides:
         # Validate branch is not empty
         len(branchName) > 0 if branchName, "branchName cannot be empty"
 
-        # Validate SSL verification is boolean string
-        verifySsl in ["true", "false"] if verifySsl, "verifySsl must be 'true' or 'false'"
+        # Validate SSL verification is boolean string - be more lenient
+        verifySsl in ["true", "false", "True", "False", "TRUE", "FALSE"] if verifySsl, "verifySsl must be 'true' or 'false'"
 
         # Validate image name is not empty
         len(imageName) > 0 if imageName, "imageName cannot be empty"

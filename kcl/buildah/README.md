@@ -2,6 +2,17 @@
 
 This module generates Tekton PipelineRun resources for building container images with Buildah.
 
+## EXAMPLE KCL-RUN
+
+```bash
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-buildah -D --quiet \
+gitUrl=https://github.com/stuttgart-things/stage-time \
+-D branchName=main \
+-D context=tests/test-app \
+-D verifySsl='"true"' \
+| kubectl -n tekton-ci apply -f -
+```
+
 ## Available Options
 
 You can override the following parameters using `-D` flags:
