@@ -132,14 +132,18 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: baseos-3
+  name: run-ansible
   namespace: tekton-ci
 spec:
   params:
-  - name: ansibleWorkingImage
-    value: ghcr.io/stuttgart-things/sthings-ansible:11.0.0
-  - name: createInventory
+  - name: ansibleVerbosity
+    value: "2"
+  - name: validateInventory
     value: "true"
+  - name: ansibleWorkingImage
+    value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
+  - name: createInventory
+    value: "false"
   - name: ansibleTargetHost
     value: all
   - name: gitRepoUrl

@@ -72,7 +72,7 @@ spec:
     - name: WORKING_IMAGE
       description: the image on which ansible will run
       type: string
-      default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
+      default: "eu.gcr.io/stuttgart-things/sthings-ansible:11.0.0"
     - name: ANSIBLE_VERBOSITY
       description: ansible verbosity level (0-4, where 0 is minimal)
       type: string
@@ -388,10 +388,16 @@ spec:
 
         for playbook in "$@"
         do
-          # Validate playbook exists
-          if [ ! -f "$playbook" ]; then
-            echo "ERROR: Playbook not found: $playbook"
-            exit 1
+          # Validate playbook exists (skip validation for collection playbooks)
+          # Collection playbooks follow the pattern: namespace.collection.playbook
+          if [[ ! "$playbook" =~ ^[a-z_]+\.[a-z_]+\.[a-z_]+ ]]; then
+            # This is a file-based playbook, validate it exists
+            if [ ! -f "$playbook" ]; then
+              echo "ERROR: Playbook file not found: $playbook"
+              exit 1
+            fi
+          else
+            echo "Detected collection playbook: $playbook (skipping file validation)"
           fi
 
           echo "=========================================="
