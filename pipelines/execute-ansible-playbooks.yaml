@@ -43,7 +43,7 @@ spec:
       description: varsFile as b64 string (later to be merged with key values)
     - name: ansibleWorkingImage
       type: string
-      default: "eu.gcr.io/stuttgart-things/sthings-ansible:11.0.0"
+      default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
       description: the image on which ansible will run
     - name: createInventory
       type: string
