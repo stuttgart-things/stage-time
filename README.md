@@ -79,6 +79,12 @@ EOF
 
 <details><summary>EXECUTE-ANSIBLE-PLAYBOOKS</summary>
 
+## CREATE NAMESPACE
+
+```bash
+kubectl create ns tekton-ci
+```
+
 ## CREATE SSH USER-CREDS AS SECRET
 
 ```bash
@@ -126,7 +132,7 @@ metadata:
   annotations:
   labels:
     tekton.dev/pipeline: execute-ansible-playbooks
-  name: monday51
+  name: baseos-3
   namespace: tekton-ci
 spec:
   params:
@@ -137,7 +143,7 @@ spec:
   - name: ansibleTargetHost
     value: all
   - name: gitRepoUrl
-    value: https://github.com/stuttgart-things/stuttgart-things.git
+    value: https://github.com/stuttgart-things/stage-time.git
   - name: gitRevision
     value: main
   - name: gitWorkspaceSubdirectory
@@ -156,8 +162,7 @@ spec:
     - https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06
   - name: ansiblePlaybooks
     value:
-    - ansible/playbooks/prepare-env.yaml
-    - ansible/playbooks/base-os.yaml
+      - sthings.baseos.setup
   - name: ansibleVarsFile
     value:
     - manage_filesystem+-true
@@ -172,7 +177,7 @@ spec:
     - reboot_all+-false
   - name: ansibleVarsInventory
     value:
-    - all+["10.31.103.27"]
+    - all+["10.31.102.107"]
   - name: ansibleExtraCollections
     value:
     - community.crypto:2.22.3
@@ -183,7 +188,9 @@ spec:
     - community.vmware:5.2.0
     - awx.awx:24.6.1
     - community.hashi_vault:6.2.0
-    - ansible.netcommon:7.1.0
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-container-25.3.792.tar.gz/sthings-container-25.3.792.tar.gz
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-rke-25.6.532.tar.gz/sthings-rke-25.6.532.tar.gz
   - name: installExtraCollections
     value: "true"
   pipelineRef:

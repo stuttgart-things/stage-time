@@ -29,13 +29,10 @@ spec:
     value: "true"
   - name: ansibleExtraRoles
     value:
-    - https://github.com/stuttgart-things/install-requirements.git,2024.05.11
-    - https://github.com/stuttgart-things/manage-filesystem.git,2024.06.07
-    - https://github.com/stuttgart-things/install-configure-vault.git
-    - https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06
+      - https://github.com/stuttgart-things/install-requirements.git,2024.05.11
   - name: ansiblePlaybooks
     value:
-      #- sthings.baseos.prepare_env
+      - sthings.baseos.prepare_env
       - sthings.baseos.setup
   - name: ansibleVarsFile
     value:

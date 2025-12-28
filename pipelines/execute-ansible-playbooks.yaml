@@ -2,7 +2,7 @@
 apiVersion: tekton.dev/v1
 kind: Pipeline
 metadata:
-  name: build-image-buildah
+  name: execute-ansible-playbooks
 spec:
   workspaces:
     - name: shared-workspace
