@@ -78,8 +78,6 @@ tasks:
       - check
     cmds:
       - rm -rf dist/
-      - git branch --set-upstream-to=origin/{{ .BRANCH }}
-      - git pull
       - |
         git add *
         if [[ -n $(git status --porcelain) ]]; then
@@ -90,7 +88,8 @@ tasks:
         else
           echo "NO CHANGES"
         fi
-        git push origin -u {{ .BRANCH }}
+      - git push origin -u {{ .BRANCH }}
+      - git branch --set-upstream-to=origin/{{ .BRANCH }}
 
   vcluster:
     desc: Create/Destory vcluster
