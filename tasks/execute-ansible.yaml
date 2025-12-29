@@ -264,19 +264,46 @@ spec:
       env:
         - name: INVENTORY
           value: $(params.INVENTORY)
+        - name: CREATE_INVENTORY
+          value: $(params.CREATE_INVENTORY)
       script: |
         #!/usr/bin/env sh
         set -eu
 
-        if [ -z "${INVENTORY}" ]; then
-          echo "Inventory is empty - creating default inventory"
-          echo "[all]" > ./inventory
-          echo "localhost ansible_connection=local" >> ./inventory
-        else
+        if [ "${CREATE_INVENTORY}" = "true" ]; then
+          echo "Creating inventory from vars.yaml inventory_groups"
+
+          # Check if vars.yaml has inventory_groups
+          if yq eval '.inventory_groups.host_groups' ./vars.yaml > /dev/null 2>&1; then
+            # Extract host groups and create inventory
+            rm -rf ./inventory
+
+            # Get all group names
+            GROUPS=$(yq eval '.inventory_groups.host_groups | keys | .[]' ./vars.yaml)
+
+            for group in $GROUPS; do
+              echo "[$group]" >> ./inventory
+              # Get hosts for this group and add them
+              yq eval ".inventory_groups.host_groups.${group}[]" ./vars.yaml >> ./inventory
+              echo "" >> ./inventory
+            done
+
+            echo "Created inventory from vars.yaml:"
+            cat ./inventory
+          else
+            echo "No inventory_groups found in vars.yaml, creating default"
+            echo "[all]" > ./inventory
+            echo "localhost ansible_connection=local" >> ./inventory
+          fi
+        elif [ -n "${INVENTORY}" ]; then
           echo "Decoding inventory from base64"
           echo "${INVENTORY}" | base64 -d > ./inventory
           echo "Inventory file contents:"
           cat ./inventory
+        else
+          echo "No inventory specified - creating default inventory"
+          echo "[all]" > ./inventory
+          echo "localhost ansible_connection=local" >> ./inventory
         fi
 
     - name: validate-inventory
