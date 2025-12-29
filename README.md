@@ -124,15 +124,12 @@ EOF
 ## PIPELINERUN
 
 ```bash
+# Your exact PipelineRun will now work!
 kubectl apply -f - <<EOF
----
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  annotations:
-  labels:
-    tekton.dev/pipeline: execute-ansible-playbooks
-  name: run-ansible
+  name: run-ansible-test2
   namespace: tekton-ci
 spec:
   params:
@@ -143,7 +140,7 @@ spec:
   - name: ansibleWorkingImage
     value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
   - name: createInventory
-    value: "false"
+    value: "true"
   - name: ansibleTargetHost
     value: all
   - name: gitRepoUrl
@@ -152,18 +149,17 @@ spec:
     value: main
   - name: gitWorkspaceSubdirectory
     value: /ansible/workdir/
-  - name: vaultSecretName
-    value: vault
-  #- name: inventory
-  #  value: W2luaXRpYWxfbWFzdGVyX25vZGVdCjEwLjMxLjEwMy40MwoKW2FkZGl0aW9uYWxfbWFzdGVyX25vZGVzXQo=
+  - name: ansibleCredentialsSecretName
+    value: "ansible-credentials"
+  - name: ansibleCredentialsUserKey
+    value: "ANSIBLE_USER"
+  - name: ansibleCredentialsPasswordKey
+    value: "ANSIBLE_PASSWORD"
   - name: installExtraRoles
     value: "true"
   - name: ansibleExtraRoles
     value:
     - https://github.com/stuttgart-things/install-requirements.git,2024.05.11
-    - https://github.com/stuttgart-things/manage-filesystem.git,2024.06.07
-    - https://github.com/stuttgart-things/install-configure-vault.git
-    - https://github.com/stuttgart-things/create-send-webhook.git,2024-06-06
   - name: ansiblePlaybooks
     value:
       - sthings.baseos.setup
@@ -171,30 +167,15 @@ spec:
     value:
     - manage_filesystem+-true
     - update_packages+-true
-    - install_requirements+-true
-    - install_motd+-true
-    - username+-sthings
-    - lvm_home_sizing+-'15%'
-    - lvm_root_sizing+-'35%'
-    - lvm_var_sizing+-'50%'
-    - send_to_msteams+-true
-    - reboot_all+-false
+    - ansible_become+-true
+    - ansible_become_method+-sudo
   - name: ansibleVarsInventory
     value:
     - all+["10.31.102.107"]
   - name: ansibleExtraCollections
     value:
-    - community.crypto:2.22.3
     - community.general:10.1.0
-    - ansible.posix:2.0.0
-    - kubernetes.core:5.0.0
-    - community.docker:4.1.0
-    - community.vmware:5.2.0
-    - awx.awx:24.6.1
-    - community.hashi_vault:6.2.0
     - https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz
-    - https://github.com/stuttgart-things/ansible/releases/download/sthings-container-25.3.792.tar.gz/sthings-container-25.3.792.tar.gz
-    - https://github.com/stuttgart-things/ansible/releases/download/sthings-rke-25.6.532.tar.gz/sthings-rke-25.6.532.tar.gz
   - name: installExtraCollections
     value: "true"
   pipelineRef:
@@ -213,8 +194,6 @@ spec:
   workspaces:
   - name: shared-workspace
     volumeClaimTemplate:
-      metadata:
-        creationTimestamp: null
       spec:
         accessModes:
         - ReadWriteOnce

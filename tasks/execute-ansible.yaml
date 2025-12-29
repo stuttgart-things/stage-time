@@ -419,8 +419,33 @@ spec:
           # Add playbook path
           ANSIBLE_CMD="${ANSIBLE_CMD} ${playbook}"
 
-          # Execute playbook
+          # Show the exact command being executed
+          echo "=========================================="
+          echo "ANSIBLE COMMAND:"
+          echo "${ANSIBLE_CMD}"
+          echo "=========================================="
+
+          # Show inventory contents
+          echo "INVENTORY FILE:"
+          cat $(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory
+          echo "=========================================="
+
+          # Show vars file contents
+          echo "VARS FILE:"
+          cat $(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars.yaml
+          echo "=========================================="
+
+          # Show credentials file if exists (without passwords)
+          if [ -n "${CREDS_FILE}" ]; then
+            echo "CREDENTIALS FILE CREATED: ${CREDS_FILE}"
+            echo "(Contents hidden for security)"
+            echo "=========================================="
+          fi
+
+          # Execute playbook with shell tracing
+          set -x
           if eval ${ANSIBLE_CMD}; then
+            set +x
             echo "Successfully executed playbook: $playbook"
             PLAYBOOKS_EXECUTED=$((PLAYBOOKS_EXECUTED + 1))
           else

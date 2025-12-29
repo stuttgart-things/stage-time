@@ -1,0 +1,94 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-ansible-fixed
+  namespace: tekton-ci
+spec:
+  params:
+  - name: ansibleVerbosity
+    value: "3"  # Higher verbosity for debugging
+  - name: validateInventory
+    value: "true"
+  - name: ansibleWorkingImage
+    value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
+
+  # Git configuration
+  - name: gitRepoUrl
+    value: https://github.com/stuttgart-things/stage-time.git
+  - name: gitRevision
+    value: main
+  - name: gitWorkspaceSubdirectory
+    value: /ansible/workdir/
+
+  # FIXED: Use real inventory, not dynamic localhost
+  - name: createInventory
+    value: "true"
+  - name: ansibleVarsInventory
+    value:
+    - all+["10.31.102.107"]  # Use your actual target host
+  - name: ansibleTargetHost
+    value: "all"
+
+  # Credentials
+  - name: ansibleCredentialsSecretName
+    value: "ansible-credentials"
+  - name: vaultSecretName
+    value: "vault"
+
+  # Roles
+  - name: installExtraRoles
+    value: "true"
+  - name: ansibleExtraRoles
+    value:
+    - https://github.com/stuttgart-things/install-requirements.git,2024.05.11
+
+  # Collections
+  - name: installExtraCollections
+    value: "true"
+  - name: ansibleExtraCollections
+    value:
+    - community.general:10.1.0
+    - https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz
+
+  # Playbooks
+  - name: ansiblePlaybooks
+    value:
+      - sthings.baseos.setup
+
+  # Variables - ADD BECOME SETTINGS
+  - name: ansibleVarsFile
+    value:
+    - ansible_become+-true
+    - ansible_become_method+-sudo
+    - manage_filesystem+-true
+    - update_packages+-true
+    - install_requirements+-true
+    - username+-sthings
+    - lvm_home_sizing+-'15%'
+    - lvm_root_sizing+-'35%'
+    - lvm_var_sizing+-'50%'
+
+  pipelineRef:
+    params:
+    - name: url
+      value: https://github.com/stuttgart-things/stage-time.git
+    - name: revision
+      value: main
+    - name: pathInRepo
+      value: pipelines/execute-ansible-playbooks.yaml
+    resolver: git
+
+  taskRunTemplate:
+    serviceAccountName: default
+  timeouts:
+    pipeline: 1h0m0s
+  workspaces:
+  - name: shared-workspace
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 20Mi
+        storageClassName: openebs-hostpath
