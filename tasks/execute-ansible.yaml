@@ -436,7 +436,7 @@ spec:
             -i $(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory \
             -e inv_path=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory \
             -e target_host=$(params.TARGET_HOST) \
-            -e path_to_vars_file=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars.yaml"
+            -e path_to_vars_file=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars"
 
           # Add credentials file if it exists
           if [ -n "${CREDS_FILE}" ]; then
