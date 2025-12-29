@@ -10,16 +10,17 @@ _task_run_template = defaults._task_run_template
 _timeouts = defaults._timeouts
 
 # Pipeline reference config with validation
-_git_config: schema.GitConfig = {
+_git_config = schema.GitConfig {
     url = option("gitUrl") or "https://github.com/stuttgart-things/stage-time.git"
     revision = option("gitRevision") or "main"
-    pathInRepo = option("gitPath") or "pipelines/execute-ansible-playbooks.yaml"
+    # Update this to match desired output
+    pathInRepo = option("gitPath") or "pipelines/execute-ansible-playbooks-from-collections.yaml"
 }
 
-_pipeline_name_prefix = option("pipelinePrefix") or "pr-ansible"
+_pipeline_name_prefix = option("pipelinePrefix") or "run-ansible-from-collections"
 
 # Storage settings with validation
-_storage_config: schema.StorageConfig = {
+_storage_config = schema.StorageConfig {
     storageClass = option("storageClass") or "openebs-hostpath"
     storageSize = option("storageSize") or "20Mi"
     storageAccessModes = option("storageAccessModes") or "ReadWriteOnce"
@@ -32,9 +33,6 @@ _storageAccessModes = _storage_config.storageAccessModes
 _workspace_config = {
     name = "shared-workspace"
     volumeClaimTemplate = {
-        metadata = {
-            creationTimestamp = None
-        }
         spec = {
             accessModes = [_storageAccessModes]
             resources = {

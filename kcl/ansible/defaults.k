@@ -6,6 +6,14 @@ _default_params = {
     vaultSecretName = "vault" # pragma: allowlist secret
     installExtraRoles = "true"
     installExtraCollections = "true"
+    # Add these new default parameters:
+    ansibleVarsInventory = []
+    ansibleVarsFile = []
+    userHome = "/home/nonroot"
+    ansibleCredentialsSecretName = "ansible-credentials" # pragma: allowlist secret
+    ansibleCredentialsUserKey = "ANSIBLE_USER"
+    ansibleCredentialsPasswordKey = "ANSIBLE_PASSWORD" # pragma: allowlist secret
+    varsFile = ""
 }
 
 _task_run_template = {

@@ -1,30 +1,17 @@
-schema PipelineOverrides:
+# schema.k
+
+# Define schemas directly without nested schema keyword
+schema GitConfig:
     """
-    Schema for pipeline parameter overrides
+    Schema for Git pipeline reference configuration
     """
-    ansibleWorkingImage?: str
-    gitRepoUrl?: str
-    gitRevision?: str
-    inventory?: str
-    ansibleExtraRoles?: [str]
-    ansiblePlaybooks?: [str]
-    ansibleExtraCollections?: [str]
+    url?: str
+    revision?: str
+    pathInRepo?: str
 
     check:
-        # Validate image format - use boolean OR
-        ansibleWorkingImage.startswith("ghcr.io/") or \
-        ansibleWorkingImage.startswith("docker.io/") or \
-        ansibleWorkingImage.startswith("quay.io/") \
-        if ansibleWorkingImage, "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
-
-        # Validate git URL format
-        gitRepoUrl.startswith("https://github.com/") if gitRepoUrl, "gitRepoUrl must be a valid GitHub HTTPS URL"
-
-        # Validate revision is not empty
-        len(gitRevision) > 0 if gitRevision, "gitRevision cannot be empty"
-
-        # Validate inventory is base64 (basic check)
-        len(inventory) > 0 if inventory, "inventory cannot be empty"
+        url.startswith("https://") if url, "Git URL must use HTTPS"
+        len(revision) > 0 if revision, "Git revision cannot be empty"
 
 schema StorageConfig:
     """
@@ -43,14 +30,44 @@ schema StorageConfig:
         storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"] \
         if storageAccessModes, "Invalid storage access mode"
 
-schema GitConfig:
+schema PipelineOverrides:
     """
-    Schema for Git pipeline reference configuration
+    Schema for pipeline parameter overrides
     """
-    url?: str
-    revision?: str
-    pathInRepo?: str
+    ansibleWorkingImage?: str
+    gitRepoUrl?: str
+    gitRevision?: str
+    inventory?: str
+    ansibleExtraRoles?: [str]
+    ansiblePlaybooks?: [str]
+    ansibleExtraCollections?: [str]
+    # Add these new parameters:
+    ansibleVarsInventory?: [str]
+    ansibleVarsFile?: [str]
+    userHome?: str
+    ansibleCredentialsSecretName?: str
+    ansibleCredentialsUserKey?: str
+    ansibleCredentialsPasswordKey?: str
+    varsFile?: str
+    createInventory?: str
+    ansibleTargetHost?: str
+    gitWorkspaceSubdirectory?: str
+    vaultSecretName?: str
+    installExtraRoles?: str
+    installExtraCollections?: str
 
     check:
-        url.startswith("https://") if url, "Git URL must use HTTPS"
-        len(revision) > 0 if revision, "Git revision cannot be empty"
+        # Validate image format - use boolean OR
+        ansibleWorkingImage.startswith("ghcr.io/") or \
+        ansibleWorkingImage.startswith("docker.io/") or \
+        ansibleWorkingImage.startswith("quay.io/") \
+        if ansibleWorkingImage, "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
+
+        # Validate git URL format
+        gitRepoUrl.startswith("https://github.com/") if gitRepoUrl, "gitRepoUrl must be a valid GitHub HTTPS URL"
+
+        # Validate revision is not empty
+        len(gitRevision) > 0 if gitRevision, "gitRevision cannot be empty"
+
+        # Validate inventory is base64 (basic check)
+        len(inventory) > 0 if inventory, "inventory cannot be empty"

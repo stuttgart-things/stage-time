@@ -8,8 +8,9 @@ _suffix = crypto.md5(_timestamp)[:8]
 
 tekton.PipelineRun {
     metadata = {
-        name = "${vars._pipeline_name_prefix}-${_suffix}"
-        }
+        name = option("pipelineRunName") or "${vars._pipeline_name_prefix}-${_suffix}"
+        namespace = option("namespace") or "tekton-ci"
+    }
     spec = {
         pipelineRef = {
             resolver = "git"
@@ -23,6 +24,5 @@ tekton.PipelineRun {
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
         workspaces = [vars._workspace_config]
-
     }
 }
