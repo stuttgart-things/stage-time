@@ -1,0 +1,148 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: execute-ansible-playbooks-from-collections
+spec:
+  workspaces:
+    - name: shared-workspace
+
+  params:
+    # -------------------------------
+    # Ansible execution
+    # -------------------------------
+    - name: ansiblePlaybooks
+      type: array
+      default: []
+      description: "Collection playbooks (FQCN), e.g. namespace.collection.playbook"
+
+    - name: ansibleTargetHost
+      type: string
+      default: "all"
+
+    - name: ansibleWorkingImage
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
+
+    - name: ansibleExtraCollections
+      type: array
+      default: []
+      description: "Additional collections to install"
+
+    - name: installExtraCollections
+      type: string
+      default: "true"
+
+    # -------------------------------
+    # Inventory / vars
+    # -------------------------------
+    - name: createInventory
+      type: string
+      default: "false"
+
+    - name: inventory
+      type: string
+      default: ""
+
+    - name: ansibleVarsInventory
+      type: array
+      default: []
+
+    - name: ansibleVarsFile
+      type: array
+      default: []
+
+    - name: varsFile
+      type: string
+      default: ""
+
+    # -------------------------------
+    # Runtime
+    # -------------------------------
+    - name: userHome
+      type: string
+      default: "/home/nonroot"
+
+    - name: vaultSecretName
+      type: string
+      default: "vault"
+
+    # -------------------------------
+    # Credentials
+    # -------------------------------
+    - name: ansibleCredentialsSecretName
+      type: string
+      default: "ansible-credentials"
+
+    - name: ansibleCredentialsUserKey
+      type: string
+      default: "ANSIBLE_USER"
+
+    - name: ansibleCredentialsPasswordKey
+      type: string
+      default: "ANSIBLE_PASSWORD"
+
+  tasks:
+    - name: execute-ansible
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/execute-ansible.yaml
+
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+
+      params:
+        - name: CREATE_INVENTORY
+          value: $(params.createInventory)
+
+        - name: EXTRA_COLLECTIONS
+          value: $(params.ansibleExtraCollections[*])
+
+        - name: INSTALL_EXTRA_COLLECTIONS
+          value: $(params.installExtraCollections)
+
+        - name: INVENTORY
+          value: $(params.inventory)
+
+        - name: INVENTORY_VARS
+          value: $(params.ansibleVarsInventory[*])
+
+        - name: EXTRA_VARS
+          value: $(params.ansibleVarsFile[*])
+
+        - name: VARS_FILE
+          value: $(params.varsFile)
+
+        - name: PLAYBOOKS
+          value: $(params.ansiblePlaybooks[*])
+
+        - name: TARGET_HOST
+          value: $(params.ansibleTargetHost)
+
+        - name: SUB_DIRECTORY
+          value: ""   # no repo checkout
+
+        - name: USER_HOME
+          value: $(params.userHome)
+
+        - name: WORKING_IMAGE
+          value: $(params.ansibleWorkingImage)
+
+        - name: vault-secret-name
+          value: $(params.vaultSecretName)
+
+        - name: ansible-credentials-secret-name
+          value: $(params.ansibleCredentialsSecretName)
+
+        - name: ansible-credentials-user-key
+          value: $(params.ansibleCredentialsUserKey)
+
+        - name: ansible-credentials-password-key
+          value: $(params.ansibleCredentialsPasswordKey)

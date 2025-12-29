@@ -123,13 +123,14 @@ EOF
 
 ## PIPELINERUN
 
+<details><summary>RUN (AT LEAST 1) PLAY FROM GIT SOURCE</summary>
+
 ```bash
-# Your exact PipelineRun will now work!
 kubectl apply -f - <<EOF
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  name: run-ansible-test2
+  name: run-ansible-test-5
   namespace: tekton-ci
 spec:
   params:
@@ -201,6 +202,88 @@ spec:
           requests:
             storage: 20Mi
         storageClassName: openebs-hostpath
+EOF
+```
+
+</details>
+
+<details><summary>RUN PLAYS FROM COLLECTIONS ONLY (NO GIT CLONE)</summary>
+
+```bash
+kubectl apply -f - <<EOF
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: run-ansible-from-collections-1
+  namespace: tekton-ci
+spec:
+  pipelineRef:
+    params:
+    - name: url
+      value: https://github.com/stuttgart-things/stage-time.git
+    - name: revision
+      value: main
+    - name: pathInRepo
+      value: pipelines/execute-ansible-playbooks-from-collections.yaml
+    resolver: git
+  taskRunTemplate:
+    serviceAccountName: default
+  timeouts:
+    pipeline: 1h0m0s
+  params:
+    # Ansible execution
+    - name: ansiblePlaybooks
+      value:
+        - sthings.baseos.setup
+    - name: ansibleTargetHost
+      value: all
+    - name: ansibleWorkingImage
+      value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
+    # Collections
+    - name: ansibleExtraCollections
+      value:
+        - community.general:10.1.0
+        - https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz
+    - name: installExtraCollections
+      value: "true"
+    # Inventory / vars
+    - name: createInventory
+      value: "true"
+    - name: ansibleVarsInventory
+      value:
+        - all+["10.31.102.107"]
+    - name: ansibleVarsFile
+      value:
+        - manage_filesystem+-true
+        - update_packages+-true
+        - ansible_become+-true
+        - ansible_become_method+-sudo
+    - name: varsFile
+      value: ""
+    - name: inventory
+      value: ""
+    # Runtime
+    - name: userHome
+      value: "/home/nonroot"
+    - name: vaultSecretName
+      value: vault
+    # Credentials
+    - name: ansibleCredentialsSecretName
+      value: ansible-credentials
+    - name: ansibleCredentialsUserKey
+      value: ANSIBLE_USER
+    - name: ansibleCredentialsPasswordKey
+      value: ANSIBLE_PASSWORD
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Mi
+          storageClassName: openebs-hostpath
 EOF
 ```
 
