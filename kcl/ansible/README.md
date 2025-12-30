@@ -83,3 +83,59 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
 ```
 
 </details>
+
+<details><summary>RENDER CROSSPLANE OBJECT</summary>
+
+```bash
+# RENDER
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "pipelineRunName": "run-ansible-test-6",
+      "namespace": "tekton-ci",
+      "storageSize": "20Mi",
+      "storageAccessModes": "ReadWriteOnce",
+      "ansibleWorkingImage": "ghcr.io/stuttgart-things/sthings-ansible:11.11.0",
+      "createInventory": "true",
+      "ansibleTargetHost": "all",
+      "gitRepoUrl": "https://github.com/stuttgart-things/stage-time.git",
+      "gitRevision": "main",
+      "gitPath": "pipelines/execute-ansible-playbooks.yaml",
+      "gitWorkspaceSubdirectory": "/ansible/workdir/",
+      "ansibleCredentialsSecretName": "ansible-credentials", # pragma: allowlist secret
+      "ansibleCredentialsUserKey": "ANSIBLE_USER",
+      "ansibleCredentialsPasswordKey": "ANSIBLE_PASSWORD", # pragma: allowlist secret
+      "installExtraRoles": "true",
+      "ansibleExtraRoles": [
+        "https://github.com/stuttgart-things/install-requirements.git,2024.05.11"
+      ],
+      "ansiblePlaybooks": [
+        "sthings.baseos.setup"
+      ],
+      "ansibleVarsFile": [
+        "manage_filesystem+-true",
+        "update_packages+-true",
+        "ansible_become+-true",
+        "ansible_become_method+-sudo"
+      ],
+      "ansibleVarsInventory": [
+        "all+[\"10.31.102.107\"]"
+      ],
+      "ansibleExtraCollections": [
+        "community.general:10.1.0",
+        "https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz"
+      ],
+      "installExtraCollections": "true",
+      "ansibleVerbosity": "2",
+      "validateInventory": "true",
+      "wrapInCrossplane": true,
+      "crossplaneObjectName": "ansible-pipeline-test-6",
+      "crossplaneNamespace": "default",
+      "crossplaneProviderConfig": "kubernetes-provider",
+      "crossplaneTimeout": "60"
+    }
+  }
+}'
+```
+
+</details>
