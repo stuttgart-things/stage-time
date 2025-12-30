@@ -1,5 +1,3 @@
-# vars.k
-
 import .defaults
 import .values
 import .schema

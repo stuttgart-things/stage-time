@@ -1,5 +1,3 @@
-# values.k
-
 import .schema
 
 # Environment-specific overrides with defaults
