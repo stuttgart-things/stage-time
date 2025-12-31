@@ -27,7 +27,7 @@ schema StorageConfig:
         if storageSize, "storageSize must end with 'Mi' or 'Gi'"
 
         # Validate access modes
-        storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"] \
+        storageAccessModes in ["ReadWriteOnce", "ReadWriteOnce", "ReadOnlyMany"] \
         if storageAccessModes, "Invalid storage access mode"
 
 schema PipelineOverrides:

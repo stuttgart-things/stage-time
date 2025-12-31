@@ -17,7 +17,7 @@ kcl mod push oci://ghcr.io/stuttgart-things/kcl-tekton-pr
 ```bash
 kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
   -D storageSize="5000Mi" \
-  -D storageAccessModes="ReadWriteMany" \
+  -D storageAccessModes="ReadWriteOnce" \
   -D ansiblePlaybooks='["sthings.baseos.prepare_env", "sthings.baseos.setup", "sthings.apps.deploy"]' \
   -D ansibleExtraCollections='["community.crypto:2.22.3", "community.general:10.1.0", "community.vmware:5.2.0"]' -D ansiblePlaybooks='["sthings.baseos.prepare_env", "sthings.baseos.setup"]'
 ```
@@ -59,7 +59,7 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
 <details><summary>RENDER + APPLY (w/ PLAYS FROM COLLECTIONS ONLY / NO GIT-CLONE IN PIPELINE)</summary>
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
+kcl run ./main.k \
   -D pipelineRunName="run-ansible-from-collections-1" \
   -D namespace="tekton-ci" \
   -D storageSize="20Mi" \
@@ -75,11 +75,26 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
   -D varsFile="" \
   -D inventory="" \
   -D userHome="/home/nonroot" \
-  -D vaultSecretName="vault" \ # pragma: allowlist secret
-  -D ansibleCredentialsSecretName="ansible-credentials" \ # pragma: allowlist secret
+  -D vaultSecretName="vault" \
+  -D ansibleCredentialsSecretName="ansible-credentials" \
   -D ansibleCredentialsUserKey="ANSIBLE_USER" \
-  -D ansibleCredentialsPasswordKey="ANSIBLE_PASSWORD" \ # pragma: allowlist secret
+  -D ansibleCredentialsPasswordKey="ANSIBLE_PASSWORD" \
   -D gitPath="pipelines/execute-ansible-playbooks-from-collections.yaml"
+```
+
+```bash
+# MINIMAL
+kcl run ./main.k \
+  -D pipelineRunName="run-ansible2" \
+  -D namespace="tekton-ci" \
+  -D ansiblePlaybooks='["sthings.baseos.setup"]' \
+  -D createInventory="true" \
+  -D ansibleVarsInventory='["all+[\"10.31.102.107\"]"]' \
+  -D ansibleVarsFile='["manage_filesystem+-true", "update_packages+-true", "ansible_become+-true", "ansible_become_method+-sudo"]' \
+  -D ansibleExtraCollections='["community.general:10.1.0", "https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz"]' \
+  -D varsFile="" \
+  -D inventory="" \
+  -D ansibleCredentialsSecretName="ansible-credentials" | kubectl apply -f -
 ```
 
 </details>
@@ -87,8 +102,8 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
 <details><summary>RENDER CROSSPLANE OBJECT</summary>
 
 ```bash
-# RENDER
-kcl run main.k -D params='{
+# RENDER (# or use main.k (or leave out reference) instead of the oci module)
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.1 -D params='{
   "oxr": {
     "spec": {
       "pipelineRunName": "run-ansible-test-6",
@@ -102,9 +117,9 @@ kcl run main.k -D params='{
       "gitRevision": "main",
       "gitPath": "pipelines/execute-ansible-playbooks.yaml",
       "gitWorkspaceSubdirectory": "/ansible/workdir/",
-      "ansibleCredentialsSecretName": "ansible-credentials", # pragma: allowlist secret
+      "ansibleCredentialsSecretName": "ansible-credentials",
       "ansibleCredentialsUserKey": "ANSIBLE_USER",
-      "ansibleCredentialsPasswordKey": "ANSIBLE_PASSWORD", # pragma: allowlist secret
+      "ansibleCredentialsPasswordKey": "ANSIBLE_PASSWORD",
       "installExtraRoles": "true",
       "ansibleExtraRoles": [
         "https://github.com/stuttgart-things/install-requirements.git,2024.05.11"
@@ -136,6 +151,35 @@ kcl run main.k -D params='{
     }
   }
 }'
+```
+
+```bash
+# MINIMAL
+kcl run main.k -D params='{
+  "oxr": {
+    "spec": {
+      "pipelineRunName": "run-ansible-test1",
+      "namespace": "tekton-ci",
+      "ansibleCredentialsSecretName": "ansible-credentials",
+      "ansiblePlaybooks": [
+        "sthings.baseos.setup"
+      ],
+      "ansibleVarsFile": [
+        "manage_filesystem+-true",
+        "update_packages+-true",
+        "ansible_become+-true",
+        "ansible_become_method+-sudo"
+      ],
+      "ansibleVarsInventory": [
+        "all+[\"10.31.102.107\"]"
+      ],
+      "wrapInCrossplane": true,
+      "crossplaneObjectName": "run-ansible-test",
+      "crossplaneNamespace": "default",
+      "crossplaneProviderConfig": "dev"
+    }
+  }
+}' --format yaml | yq eval -P '.items[]' - | awk 'BEGIN{doc=""} /^apiVersion: /{if(doc!=""){print "---";} doc=1} {print}' | kubectl apply -f -
 ```
 
 </details>

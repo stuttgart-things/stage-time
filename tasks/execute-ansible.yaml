@@ -378,16 +378,20 @@ spec:
         mkdir -p "${HOME}/.ansible/collections"
 
         echo "Installing roles and collections to home directory"
-        if [ -d "roles" ]; then
+        if [ -d "roles" ] && [ -n "$(ls -A roles 2>/dev/null)" ]; then
           cp -R roles/* "${HOME}/.ansible/roles/"
           echo "Installed roles:"
           ansible-galaxy role list
+        else
+          echo "No roles to install"
         fi
 
-        if [ -d "collections" ]; then
+        if [ -d "collections" ] && [ -n "$(ls -A collections 2>/dev/null)" ]; then
           cp -R collections/* "${HOME}/.ansible/collections/"
           echo "Installed collections:"
           ansible-galaxy collection list
+        else
+          echo "No collections to install"
         fi
 
         # Create secure credentials file if credentials are provided

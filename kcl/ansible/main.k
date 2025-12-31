@@ -5,32 +5,35 @@ import .vars
 import datetime
 import crypto
 
-# --- Read parameters (Composition format) ---
+# --- Read parameters (supports both Composition format and flat format) ---
 _params = option("params") or {}
 _spec = _params?.oxr?.spec or {}
 
+# If no nested structure, use flat parameters directly
+_flat_params = _spec if _spec else _params
+
 # --- Extract fields from spec (with fallbacks to direct options for backward compatibility) ---
-_storageSize = _spec?.storageSize or option("storageSize") or "5000Mi"
-_storageAccessModes = _spec?.storageAccessModes or option("storageAccessModes") or "ReadWriteMany"
-_storageClass = _spec?.storageClass or option("storageClass") or "openebs-hostpath"
-_namespace = _spec?.namespace or option("namespace") or "tekton-ci"
-_pipelineRunName = _spec?.pipelineRunName or option("pipelineRunName") or None
-_gitRepoUrl = _spec?.gitRepoUrl or option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
-_gitRevision = _spec?.gitRevision or option("gitRevision") or "main"
-_gitPath = _spec?.gitPath or option("gitPath") or "pipelines/execute-ansible-playbooks-from-collections.yaml"
-_ansibleWorkingImage = _spec?.ansibleWorkingImage or option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
-_ansiblePlaybooks = _spec?.ansiblePlaybooks or option("ansiblePlaybooks") or ["sthings.baseos.setup"]
-_ansibleExtraCollections = _spec?.ansibleExtraCollections or option("ansibleExtraCollections") or []
-_ansibleExtraRoles = _spec?.ansibleExtraRoles or option("ansibleExtraRoles") or []
-_ansibleVarsInventory = _spec?.ansibleVarsInventory or option("ansibleVarsInventory") or []
-_ansibleVarsFile = _spec?.ansibleVarsFile or option("ansibleVarsFile") or []
+_storageSize = _flat_params?.storageSize or option("storageSize") or "20Mi"
+_storageAccessModes = _flat_params?.storageAccessModes or option("storageAccessModes") or "ReadWriteOnce"
+_storageClass = _flat_params?.storageClass or option("storageClass") or "openebs-hostpath"
+_namespace = _flat_params?.namespace or option("namespace") or "tekton-ci"
+_pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or None
+_gitRepoUrl = _flat_params?.gitRepoUrl or option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
+_gitRevision = _flat_params?.gitRevision or option("gitRevision") or "main"
+_gitPath = _flat_params?.gitPath or option("gitPath") or "pipelines/execute-ansible-playbooks-from-collections.yaml"
+_ansibleWorkingImage = _flat_params?.ansibleWorkingImage or option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
+_ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks") or ["sthings.baseos.setup"]
+_ansibleExtraCollections = _flat_params?.ansibleExtraCollections or option("ansibleExtraCollections") or []
+_ansibleExtraRoles = _flat_params?.ansibleExtraRoles or option("ansibleExtraRoles") or []
+_ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVarsInventory") or []
+_ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 
 # --- Crossplane wrapper settings ---
-_wrapInCrossplane = _spec?.wrapInCrossplane or option("wrapInCrossplane") or False
-_crossplaneObjectName = _spec?.crossplaneObjectName or option("crossplaneObjectName") or "tekton-pipeline-run"
-_crossplaneNamespace = _spec?.crossplaneNamespace or option("crossplaneNamespace") or "default"
-_crossplaneProviderConfig = _spec?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
-_crossplaneTimeout = _spec?.crossplaneTimeout or option("crossplaneTimeout") or "60"
+_wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
+_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or "tekton-pipeline-run"
+_crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
+_crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
+_crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "60"
 
 # --- Generate timestamp and suffix ---
 _timestamp = str(datetime.now())
@@ -116,9 +119,9 @@ _crossplaneObject = {
 }
 
 # --- Output based on mode ---
-# If params is provided (Composition mode), return items array
-# Otherwise return single resource (direct mode)
-if _params != {}:
+# If params is provided as nested Composition format, return items array
+# Otherwise return single resource (direct/flat mode)
+if _spec:
     items = [
         if _wrapInCrossplane:
             _crossplaneObject
