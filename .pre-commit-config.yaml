@@ -47,3 +47,6 @@ repos:
         language: python
         # for backward compatibility
         files: .*  # all files
+        args:
+          - "--exclude-files"
+          - "kcl/ansible/README.md"
