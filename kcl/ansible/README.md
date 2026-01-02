@@ -155,7 +155,7 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.1 -D params='{
 
 ```bash
 # MINIMAL
-kcl run main.k -D params='{
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.2 -D params='{
   "oxr": {
     "spec": {
       "pipelineRunName": "run-ansible-test1",
