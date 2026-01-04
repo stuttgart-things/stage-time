@@ -1,0 +1,57 @@
+"""
+AnsibleRun Main Configuration
+Supports both Composition format and flat format with -D overrides
+"""
+
+import .schema
+
+# --- Read parameters (supports both Composition format and flat format) ---
+_params = option("params") or {}
+_spec = _params?.oxr?.spec or {}
+
+# If no nested structure, use flat parameters directly
+_flat_params = _spec if _spec else _params
+
+# --- Extract fields from spec (with fallbacks to direct options for backward compatibility) ---
+
+# Metadata
+_name = _flat_params?.name or option("name") or "ansible-run"
+_metadataNamespace = _flat_params?.metadataNamespace or option("metadataNamespace") or "default"
+
+# Crossplane Configuration
+_wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or True
+_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or _name
+_crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
+_crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "default"
+
+# PipelineRun Configuration
+_pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or _name
+_namespace = _flat_params?.namespace or option("namespace") or "tekton-ci"
+
+# Ansible Configuration
+_ansibleCredentialsSecretName = _flat_params?.ansibleCredentialsSecretName or option("ansibleCredentialsSecretName") or "ansible-credentials"
+_ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks") or []
+_ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
+_ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVarsInventory") or []
+
+# --- Generate AnsibleRun Resource ---
+ansibleRun = schema.AnsibleRun {
+    metadata = schema.Metadata {
+        name = _name
+        namespace = _metadataNamespace
+    }
+    spec = schema.AnsibleRunSpec {
+        wrapInCrossplane = _wrapInCrossplane
+        crossplaneObjectName = _crossplaneObjectName
+        crossplaneNamespace = _crossplaneNamespace
+        crossplaneProviderConfig = _crossplaneProviderConfig
+
+        pipelineRunName = _pipelineRunName
+        namespace = _namespace
+
+        ansibleCredentialsSecretName = _ansibleCredentialsSecretName
+        ansiblePlaybooks = _ansiblePlaybooks
+        ansibleVarsFile = _ansibleVarsFile
+        ansibleVarsInventory = _ansibleVarsInventory
+    }
+}
