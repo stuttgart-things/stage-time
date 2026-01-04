@@ -39,9 +39,9 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
 -D gitRepoUrl="https://github.com/stuttgart-things/stage-time.git" \
 -D gitRevision="main" \
 -D gitWorkspaceSubdirectory="/ansible/workdir/" \
--D ansibleCredentialsSecretName="ansible-credentials" \ # pragma: allowlist secret
+-D ansibleCredentialsSecretName="ansible-credentials" \
 -D ansibleCredentialsUserKey="ANSIBLE_USER" \
--D ansibleCredentialsPasswordKey="ANSIBLE_PASSWORD" \ # pragma: allowlist secret
+-D ansibleCredentialsPasswordKey="ANSIBLE_PASSWORD" \
 -D installExtraRoles="true" \
 -D ansibleExtraRoles='["https://github.com/stuttgart-things/install-requirements.git,2024.05.11"]' \
 -D ansiblePlaybooks='["sthings.baseos.setup"]' \
@@ -103,7 +103,7 @@ kcl run ./main.k \
 
 ```bash
 # RENDER (# or use main.k (or leave out reference) instead of the oci module)
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.1 -D params='{
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.3 -D params='{
   "oxr": {
     "spec": {
       "pipelineRunName": "run-ansible-test-6",
@@ -134,7 +134,7 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.1 -D params='{
         "ansible_become_method+-sudo"
       ],
       "ansibleVarsInventory": [
-        "all+[\"10.31.102.107\"]"
+        "all+[\"10.31.102.155\"]"
       ],
       "ansibleExtraCollections": [
         "community.general:10.1.0",
