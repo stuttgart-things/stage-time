@@ -7,29 +7,17 @@ _ansibleWorkingImage = option("ansibleWorkingImage") or "ghcr.io/stuttgart-thing
 _gitRepoUrl = option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
 _gitRevision = option("gitRevision") or "main"
 _inventory = option("inventory") or ""
-_ansibleExtraRoles = option("ansibleExtraRoles") or [
-    "https://github.com/stuttgart-things/install-requirements.git,2024.05.11"
-]
+_ansibleExtraRoles = option("ansibleExtraRoles") or []
 
-_ansibleExtraCollections = option("ansibleExtraCollections") or [
-    "community.general:10.1.0",
-    "https://github.com/stuttgart-things/ansible/releases/download/sthings-baseos-25.4.118.tar.gz/sthings-baseos-25.4.118.tar.gz"
-]
+_ansibleExtraCollections = option("ansibleExtraCollections") or []
 
 _ansiblePlaybooks = option("ansiblePlaybooks") or [
     "sthings.baseos.setup"
 ]
 
 # New parameters with defaults
-_ansibleVarsInventory = option("ansibleVarsInventory") or [
-    'all+["10.31.102.107"]'
-]
-_ansibleVarsFile = option("ansibleVarsFile") or [
-    "manage_filesystem+-true",
-    "update_packages+-true",
-    "ansible_become+-true",
-    "ansible_become_method+-sudo"
-]
+_ansibleVarsInventory = option("ansibleVarsInventory") or []
+_ansibleVarsFile = option("ansibleVarsFile") or []
 _userHome = option("userHome") or "/home/nonroot"
 _vaultSecretName = option("vaultSecretName") or "vault"
 _ansibleCredentialsSecretName = option("ansibleCredentialsSecretName") or "ansible-credentials"
