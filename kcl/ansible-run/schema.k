@@ -28,6 +28,7 @@ schema AnsibleRunSpec:
     ansiblePlaybooks?: [str]
     ansibleVarsFile?: [str]
     ansibleVarsInventory?: [str]
+    ansibleExtraCollections?: [str]
 
 schema AnsibleRun:
     """

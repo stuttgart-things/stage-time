@@ -20,11 +20,13 @@ _metadataNamespace = _flat_params?.metadataNamespace or option("metadataNamespac
 
 # Crossplane Configuration
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or True
+# Default crossplaneObjectName to name if not explicitly provided
 _crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or _name
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "default"
 
 # PipelineRun Configuration
+# Default pipelineRunName to name if not explicitly provided
 _pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or _name
 _namespace = _flat_params?.namespace or option("namespace") or "tekton-ci"
 
@@ -33,9 +35,10 @@ _ansibleCredentialsSecretName = _flat_params?.ansibleCredentialsSecretName or op
 _ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks") or []
 _ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 _ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVarsInventory") or []
+_ansibleExtraCollections = _flat_params?.ansibleExtraCollections or option("ansibleExtraCollections") or []
 
 # --- Generate AnsibleRun Resource ---
-ansibleRun = schema.AnsibleRun {
+_ansibleRun = schema.AnsibleRun {
     metadata = schema.Metadata {
         name = _name
         namespace = _metadataNamespace
@@ -53,5 +56,8 @@ ansibleRun = schema.AnsibleRun {
         ansiblePlaybooks = _ansiblePlaybooks
         ansibleVarsFile = _ansibleVarsFile
         ansibleVarsInventory = _ansibleVarsInventory
+        ansibleExtraCollections = _ansibleExtraCollections
     }
 }
+
+_ansibleRun
