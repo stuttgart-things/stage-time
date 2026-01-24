@@ -3,8 +3,9 @@
 ## RENDER CLAIM (KIND XPLANE SETUP)
 
 ```bash
-kcl run main.k \
-  -D name=vre2-kind-xplane-cluster \
+kcl run --quiet \
+  oci://ghcr.io/stuttgart-things/xplane-claim-ansiblerun --tag 0.2.0 \
+  -D name=vre2-xplane-cluster \
   -D metadataNamespace=default \
   -D wrapInCrossplane=true \
   -D crossplaneNamespace=default \
@@ -13,7 +14,7 @@ kcl run main.k \
   -D ansibleCredentialsSecretName=ansible-credentials \
   -D ansiblePlaybooks='["sthings.container.kind_xplane"]' \
   -D ansibleVarsInventory='["all+[\"10.31.103.27\"]"]' \
-  -D ansibleExtraCollections='["https://github.com/stuttgart-things/ansible/releases/download/sthings-container-26.1.713.tar.gz/sthings-container-26.1.713.tar.gz"]' | kubectl apply -f -
+  -D ansibleExtraCollections='["https://github.com/stuttgart-things/ansible/releases/download/sthings-container-26.1.784.tar.gz/sthings-container-26.1.784.tar.gz"]' | kubectl apply -f -
 ```
 
 
