@@ -44,6 +44,11 @@ _crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplane
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
 _crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "60"
+# Opt-in: when true the wrapped Object only reports Ready once the
+# PipelineRun's "Succeeded" condition is True (via provider-kubernetes
+# DeriveFromCelQuery). Off by default so other consumers of this module
+# keep the "ready on create" behaviour.
+_deriveReadiness = _flat_params?.deriveReadiness or option("deriveReadiness") or False
 
 # --- Generate timestamp and suffix ---
 _timestamp = str(datetime.now())
@@ -126,6 +131,11 @@ _crossplaneObject = {
             kind = "ClusterProviderConfig"
             name = _crossplaneProviderConfig
         }
+        if _deriveReadiness:
+            readiness = {
+                policy = "DeriveFromCelQuery"
+                celQuery = "has(object.status) && has(object.status.conditions) && object.status.conditions.exists(c, c.type == \"Succeeded\" && c.status == \"True\")"
+            }
     }
 }
 

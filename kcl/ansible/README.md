@@ -212,3 +212,12 @@ is selected (or in flat `-D` mode) the context is empty and behaviour is
 unchanged. See the `ansible-run` Configuration in
 [`crossplane-configurations`](https://github.com/stuttgart-things/crossplane-configurations)
 for the wired-up Composition and example `EnvironmentConfig`.
+
+## READINESS (OPT-IN)
+
+Set `deriveReadiness=true` (XR `spec.deriveReadiness` or `-D`) to make the
+wrapped `Object` report `Ready` only once the PipelineRun's `Succeeded`
+condition is `True`. This is implemented via provider-kubernetes
+`spec.readiness.policy: DeriveFromCelQuery`, so `function-auto-ready` can
+bubble real pipeline success up to the XR. Default is `false` — the
+Object is ready on create, unchanged for existing consumers.
