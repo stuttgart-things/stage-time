@@ -183,3 +183,32 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.2 -D params='{
 ```
 
 </details>
+
+## CROSSPLANE ENVIRONMENTCONFIG (SHARED DEFAULTS)
+
+When this module is rendered by `function-kcl` inside a Crossplane
+Composition, it reads shared per-environment defaults from the pipeline
+**context** key `apiextensions.crossplane.io/environment`. That key is
+populated by [`function-environment-configs`](https://github.com/crossplane-contrib/function-environment-configs),
+which must run as an earlier pipeline step and select one or more
+`EnvironmentConfig` resources.
+
+The following `data` keys are consumed (all optional):
+
+| EnvironmentConfig `data` key | Purpose |
+|------------------------------|---------|
+| `gitRepoUrl`                 | Default Git repo for the pipeline definition |
+| `gitRevision`                | Default Git branch/revision |
+| `gitPath`                    | Default path to the pipeline file in the repo |
+| `storageClass`               | Default workspace PVC StorageClass |
+| `ansibleWorkingImage`        | Default Ansible working container image |
+| `namespace`                  | Default Tekton namespace for the PipelineRun |
+| `ansibleExtraCollections`    | Default Ansible collections (JSON list) |
+| `ansibleCredentialsSecretName` | Default credentials Secret name |
+
+Precedence per field: explicit `oxr.spec` value → `EnvironmentConfig`
+value → flat `-D` option → hardcoded default. When no EnvironmentConfig
+is selected (or in flat `-D` mode) the context is empty and behaviour is
+unchanged. See the `ansible-run` Configuration in
+[`crossplane-configurations`](https://github.com/stuttgart-things/crossplane-configurations)
+for the wired-up Composition and example `EnvironmentConfig`.
