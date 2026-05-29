@@ -44,6 +44,12 @@ EnvironmentConfig provides shared *defaults* only (XR spec always wins) for:
 the PipelineRun's `Succeeded` condition is `True`. Keep it opt-in — other
 consumers of this module rely on the default "ready on create".
 
+**`deriveReadiness` only takes effect together with `wrapInCrossplane=true`.**
+The readiness policy lives in the Crossplane `Object` wrapper (`main.k`,
+`if _deriveReadiness:` block), which is only emitted when `wrapInCrossplane`
+is true. With `wrapInCrossplane` false (a bare `PipelineRun`), setting
+`deriveReadiness:true` is a silent no-op.
+
 ## Local render / test
 ```bash
 # Flat mode (fast iteration):
@@ -56,6 +62,7 @@ kcl run main.k \
 kcl run main.k -D params='{
   "oxr": {"spec": {"pipelineRunName":"t","namespace":"tekton-ci",
                    "ansiblePlaybooks":["sthings.baseos.setup"],
+                   "wrapInCrossplane":true,
                    "deriveReadiness":true}},
   "ctx": {"apiextensions.crossplane.io/environment": {"gitRevision":"dev"}},
   "ocds": {}
