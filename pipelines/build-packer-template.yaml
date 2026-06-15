@@ -79,6 +79,10 @@ spec:
       type: string
       default: ""
       description: subdirectory on workspace
+  results:
+    - name: template-name
+      description: name of the template/artifact produced by the build
+      value: $(tasks.execute-packer.results.template-name)
   tasks:
     - name: fetch-repository
       taskRef:
