@@ -17,7 +17,7 @@ spec:
     resolver: git
   params:
   - name: ansibleWorkingImage
-    value: ghcr.io/stuttgart-things/sthings-ansible:11.0.0
+    value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
   - name: createInventory
     value: "false"
   - name: gitRepoUrl
