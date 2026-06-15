@@ -1,5 +1,8 @@
 # stuttgart-things/stage-time
 
+[![Pre-commit](https://github.com/stuttgart-things/stage-time/actions/workflows/pre-commit.yaml/badge.svg)](https://github.com/stuttgart-things/stage-time/actions/workflows/pre-commit.yaml)
+[![KCL Validate](https://github.com/stuttgart-things/stage-time/actions/workflows/kcl-validate.yaml/badge.svg)](https://github.com/stuttgart-things/stage-time/actions/workflows/kcl-validate.yaml)
+
 collection of tekton pipeline building blocks
 
 ## DEPLOY TEKTON
