@@ -72,7 +72,7 @@ spec:
     - name: WORKING_IMAGE
       description: the image on which ansible will run
       type: string
-      default: "eu.gcr.io/stuttgart-things/sthings-ansible:11.0.0"
+      default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
     - name: ANSIBLE_VERBOSITY
       description: ansible verbosity level (0-4, where 0 is minimal)
       type: string

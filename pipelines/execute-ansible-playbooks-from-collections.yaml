@@ -24,6 +24,16 @@ spec:
       type: string
       default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
 
+    - name: ansibleVerbosity
+      type: string
+      default: "2"
+      description: ansible verbosity level (0-4, where 0 is minimal)
+
+    - name: validateInventory
+      type: string
+      default: "true"
+      description: validate inventory before running playbooks
+
     - name: ansibleExtraCollections
       type: array
       default: []
@@ -134,6 +144,12 @@ spec:
 
         - name: WORKING_IMAGE
           value: $(params.ansibleWorkingImage)
+
+        - name: ANSIBLE_VERBOSITY
+          value: $(params.ansibleVerbosity)
+
+        - name: VALIDATE_INVENTORY
+          value: $(params.validateInventory)
 
         - name: vault-secret-name
           value: $(params.vaultSecretName)

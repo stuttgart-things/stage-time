@@ -239,6 +239,10 @@ spec:
       value: all
     - name: ansibleWorkingImage
       value: ghcr.io/stuttgart-things/sthings-ansible:11.11.0
+    - name: ansibleVerbosity
+      value: "2"
+    - name: validateInventory
+      value: "true"
     # Collections
     - name: ansibleExtraCollections
       value:

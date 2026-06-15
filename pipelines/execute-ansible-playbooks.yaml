@@ -17,10 +17,6 @@ spec:
       type: array
       default: []
       description: extra collections to install
-    - name: ansibleInventoryFile
-      type: array
-      default: []
-      description: values for ansible inventory file
     - name: ansiblePlaybooks
       type: array
       default: []
@@ -45,6 +41,14 @@ spec:
       type: string
       default: "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
       description: the image on which ansible will run
+    - name: ansibleVerbosity
+      type: string
+      default: "2"
+      description: ansible verbosity level (0-4, where 0 is minimal)
+    - name: validateInventory
+      type: string
+      default: "true"
+      description: validate inventory before running playbooks
     - name: createInventory
       type: string
       default: "false"
@@ -139,6 +143,10 @@ spec:
           value: $(params.userHome)
         - name: WORKING_IMAGE
           value: $(params.ansibleWorkingImage)
+        - name: ANSIBLE_VERBOSITY
+          value: $(params.ansibleVerbosity)
+        - name: VALIDATE_INVENTORY
+          value: $(params.validateInventory)
         - name: vault-secret-name
           value: $(params.vaultSecretName)
         # Add the new parameters for ansible credentials
