@@ -1,0 +1,21 @@
+---
+name: Pre-commit
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  pre-commit:
+    name: Pre-commit Hooks
+    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-pre-commit.yaml@main
+    with:
+      config-path: .pre-commit-config.yaml
+    secrets: inherit
