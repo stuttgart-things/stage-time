@@ -48,10 +48,8 @@ _ansibleRun = schema.AnsibleRun {
         crossplaneObjectName = _crossplaneObjectName
         crossplaneNamespace = _crossplaneNamespace
         crossplaneProviderConfig = _crossplaneProviderConfig
-
         pipelineRunName = _pipelineRunName
         namespace = _namespace
-
         ansibleCredentialsSecretName = _ansibleCredentialsSecretName
         ansiblePlaybooks = _ansiblePlaybooks
         ansibleVarsFile = _ansibleVarsFile

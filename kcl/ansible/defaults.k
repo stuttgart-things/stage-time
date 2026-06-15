@@ -3,16 +3,19 @@ _default_params = {
     createInventory = "false"
     ansibleTargetHost = "all"
     gitWorkspaceSubdirectory = "/ansible/workdir/"
-    vaultSecretName = "vault" # pragma: allowlist secret
+    # pragma: allowlist secret
+    vaultSecretName = "vault"
     installExtraRoles = "true"
     installExtraCollections = "true"
     # Add these new default parameters:
     ansibleVarsInventory = []
     ansibleVarsFile = []
     userHome = "/home/nonroot"
-    ansibleCredentialsSecretName = "ansible-credentials" # pragma: allowlist secret
+    # pragma: allowlist secret
+    ansibleCredentialsSecretName = "ansible-credentials"
     ansibleCredentialsUserKey = "ANSIBLE_USER"
-    ansibleCredentialsPasswordKey = "ANSIBLE_PASSWORD" # pragma: allowlist secret
+    # pragma: allowlist secret
+    ansibleCredentialsPasswordKey = "ANSIBLE_PASSWORD"
     varsFile = ""
 }
 
@@ -21,5 +24,5 @@ _task_run_template = {
 }
 
 _timeouts = {
-  pipeline = "1h0m0s"
+    pipeline = "1h0m0s"
 }

@@ -1,5 +1,4 @@
 # main.k
-
 import tekton_pipelines.v1 as tekton
 import .vars
 import datetime
@@ -44,6 +43,7 @@ _crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplane
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
 _crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "60"
+
 # Opt-in: when true the wrapped Object only reports Ready once the
 # PipelineRun's "Succeeded" condition is True (via provider-kubernetes
 # DeriveFromCelQuery). Off by default so other consumers of this module
@@ -52,7 +52,7 @@ _deriveReadiness = _flat_params?.deriveReadiness or option("deriveReadiness") or
 
 # --- Generate timestamp and suffix ---
 _timestamp = str(datetime.now())
-_suffix = crypto.md5(_timestamp)[:8]
+_suffix = crypto.md5(_timestamp)[:8:]
 
 # --- Override configurations with extracted params ---
 _git_config_override = {
@@ -99,13 +99,9 @@ _pipelineRun = tekton.PipelineRun {
     spec = {
         pipelineRef = {
             resolver = "git"
-            params = [
-                {name = k, value = v} for k, v in _git_config_override
-            ]
+            params = [{name = k, value = v} for k, v in _git_config_override]
         }
-        params = [
-            {name = k, value = v} for k, v in (vars._pipeline_params | _pipeline_params_override)
-        ]
+        params = [{name = k, value = v} for k, v in (vars._pipeline_params | _pipeline_params_override)]
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
         workspaces = [_workspace_config_override]
@@ -149,8 +145,7 @@ if _spec:
         else:
             _pipelineRun
     ]
+elif _wrapInCrossplane:
+    _crossplaneObject
 else:
-    if _wrapInCrossplane:
-        _crossplaneObject
-    else:
-        _pipelineRun
+    _pipelineRun

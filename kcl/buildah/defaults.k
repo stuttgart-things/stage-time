@@ -19,10 +19,7 @@ _params = {
 }
 
 # Add your other defaults here
-_task_run_template = {
-    # your task run template config
-}
-
-_timeouts = {
-    # your timeout config
-}
+_task_run_template = {}
+# your task run template config
+_timeouts = {}
+# your timeout config

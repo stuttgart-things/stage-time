@@ -23,12 +23,9 @@ schema StorageConfig:
 
     check:
         # Validate storage size format (e.g., "20Mi", "1Gi")
-        storageSize.endswith("Mi") or storageSize.endswith("Gi") \
-        if storageSize, "storageSize must end with 'Mi' or 'Gi'"
-
+        storageSize.endswith("Mi") or storageSize.endswith("Gi") if storageSize, "storageSize must end with 'Mi' or 'Gi'"
         # Validate access modes
-        storageAccessModes in ["ReadWriteOnce", "ReadWriteOnce", "ReadOnlyMany"] \
-        if storageAccessModes, "Invalid storage access mode"
+        storageAccessModes in ["ReadWriteOnce", "ReadWriteOnce", "ReadOnlyMany"] if storageAccessModes, "Invalid storage access mode"
 
 schema PipelineOverrides:
     """
@@ -58,16 +55,11 @@ schema PipelineOverrides:
 
     check:
         # Validate image format - use boolean OR
-        ansibleWorkingImage.startswith("ghcr.io/") or \
-        ansibleWorkingImage.startswith("docker.io/") or \
-        ansibleWorkingImage.startswith("quay.io/") \
-        if ansibleWorkingImage, "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
-
+        ansibleWorkingImage.startswith("ghcr.io/") or ansibleWorkingImage.startswith("docker.io/") or ansibleWorkingImage.startswith("quay.io/") if ansibleWorkingImage, "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
         # Validate git URL format
         gitRepoUrl.startswith("https://github.com/") if gitRepoUrl, "gitRepoUrl must be a valid GitHub HTTPS URL"
-
         # Validate revision is not empty
         len(gitRevision) > 0 if gitRevision, "gitRevision cannot be empty"
-
         # Validate inventory is base64 (basic check)
         len(inventory) > 0 if inventory, "inventory cannot be empty"
+
