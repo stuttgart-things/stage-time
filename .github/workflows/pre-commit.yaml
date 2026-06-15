@@ -22,4 +22,4 @@ jobs:
       # Dagger pre-commit sandbox. Skip it here; Dockerfile linting is tracked as
       # a follow-up in #34 (separate hadolint job or hadolint in the linting image).
       skip-hooks: hadolint-docker
-    secrets: inherit
+    secrets: inherit # pragma: allowlist secret

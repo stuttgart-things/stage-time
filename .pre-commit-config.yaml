@@ -55,4 +55,9 @@ repos:
         files: .*  # all files
         args:
           - "--exclude-files"
-          - "kcl/ansible/README.md"
+          # README carries example secrets. *.k files are formatted by `kcl fmt`,
+          # which relocates a trailing `pragma: allowlist secret` onto its own
+          # line above the value, where detect-secrets no longer honors it — so
+          # in-line allowlisting can't survive in KCL. kcl fmt is authoritative
+          # for *.k (matching the trailing-whitespace/end-of-file-fixer excludes).
+          - "(kcl/ansible/README\\.md|\\.k$)"
