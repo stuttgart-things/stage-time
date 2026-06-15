@@ -25,7 +25,7 @@ schema StorageConfig:
         # Validate storage size format (e.g., "20Mi", "1Gi")
         storageSize.endswith("Mi") or storageSize.endswith("Gi") if storageSize, "storageSize must end with 'Mi' or 'Gi'"
         # Validate access modes
-        storageAccessModes in ["ReadWriteOnce", "ReadWriteOnce", "ReadOnlyMany"] if storageAccessModes, "Invalid storage access mode"
+        storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"] if storageAccessModes, "Invalid storage access mode"
 
 schema PipelineOverrides:
     """
