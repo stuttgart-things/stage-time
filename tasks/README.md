@@ -44,3 +44,47 @@ EOF
 ```
 
 </details>
+
+<details><summary>DECRYPT SOPS</summary>
+
+Decrypts SOPS-encrypted files from the `input` workspace and writes the
+plaintext to the `output` workspace. Decryption keys are provided through the
+optional `sops-keys` workspace (an age key file and/or a PGP private key).
+
+Create a secret holding your age key:
+
+```bash
+kubectl create secret generic sops-age \
+--from-file=keys.txt=$HOME/.config/sops/age/keys.txt \
+-n tekton-ci
+```
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: decrypt-sops-test
+  namespace: tekton-ci
+spec:
+  taskRef:
+    name: decrypt-sops
+  params:
+    - name: filePattern
+      value: "*.sops.yaml"
+    # - name: files
+    #   value: "secrets/app.sops.yaml secrets/db.sops.yaml"
+  workspaces:
+    - name: input
+      persistentVolumeClaim:
+        claimName: encrypted-files-pvc
+    - name: output
+      emptyDir: {}
+    - name: sops-keys
+      secret:
+        secretName: sops-age
+EOF
+```
+
+</details>
