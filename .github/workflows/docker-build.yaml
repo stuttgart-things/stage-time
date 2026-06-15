@@ -1,0 +1,180 @@
+---
+name: Docker Build & Push (sthings-ansible)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - images/ansible/**
+      - .github/workflows/docker-build.yaml
+  push:
+    branches: [main]
+    paths:
+      - images/ansible/**
+      - .github/workflows/docker-build.yaml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: stuttgart-things/sthings-ansible
+  REGISTRY: ghcr.io
+
+jobs:
+  # PR / manual: build images/ansible/Dockerfile and push to ttl.sh (ephemeral,
+  # no auth) as a build-validation gate, then trivy-scan the result. No ghcr
+  # writes here, so fork PRs stay green.
+  build-validate:
+    name: build-validate (ttl.sh)
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Dagger Build and Push (ttl.sh)
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/docker@v0.90.1
+          call: >-
+            build-and-push
+            --source images/ansible
+            --dockerfile Dockerfile
+            --repository-name ${{ env.IMAGE }}
+            --registry-url ttl.sh
+            --tag "${{ github.sha }}"
+            --progress plain
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Scan image with Trivy
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/trivy@v0.90.1
+          call: scan-image --image-ref="ttl.sh/${{ env.IMAGE }}:${{ github.sha }}" --severity="HIGH,CRITICAL" --trivy-version="0.64.1" export --path=/tmp/trivy-scan-report.json
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-scan-report
+          path: /tmp/trivy-scan-report.json
+          retention-days: 30
+
+      - name: Build Summary
+        run: |
+          {
+            echo "## 🧪 sthings-ansible build validated (ttl.sh)"
+            echo ""
+            echo "**Image:** \`ttl.sh/${{ env.IMAGE }}:${{ github.sha }}\`"
+            echo ""
+            echo "⏰ ttl.sh images expire after 1 hour."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Merge to main: build once → push to ghcr by immutable :sha, then use the
+  # dagger crane module to re-tag that exact digest to :<ANSIBLE_VERSION> and
+  # :latest (promotion, no rebuild).
+  publish:
+    name: publish (ghcr)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REGISTRY_USERNAME: ${{ github.actor }}
+      REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Resolve image version from Dockerfile
+        id: meta
+        run: |
+          version=$(grep -oP '^ARG ANSIBLE_VERSION=\K.*' images/ansible/Dockerfile)
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: ${version}"
+
+      - name: Dagger Build and Push (ghcr :sha)
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/docker@v0.90.1
+          call: >-
+            build-and-push
+            --source images/ansible
+            --dockerfile Dockerfile
+            --repository-name ${{ env.IMAGE }}
+            --registry-url ${{ env.REGISTRY }}
+            --registry-username env:REGISTRY_USERNAME
+            --registry-password env:REGISTRY_PASSWORD
+            --tag "${{ github.sha }}"
+            --progress plain
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Scan image with Trivy
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/trivy@v0.90.1
+          call: scan-image --image-ref="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}" --severity="HIGH,CRITICAL" --trivy-version="0.64.1" export --path=/tmp/trivy-scan-report.json
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-scan-report
+          path: /tmp/trivy-scan-report.json
+          retention-days: 30
+
+      # crane copy = re-tag by digest (no rebuild). Source is the private ghcr
+      # :sha just pushed, so source creds are passed alongside target creds.
+      - name: Crane re-tag :sha → :version
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/crane@v0.91.0
+          call: >-
+            copy
+            --source ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+            --target ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            --source-registry ${{ env.REGISTRY }}
+            --source-username ${{ github.actor }}
+            --source-password env:REGISTRY_PASSWORD
+            --target-registry ${{ env.REGISTRY }}
+            --target-username ${{ github.actor }}
+            --target-password env:REGISTRY_PASSWORD
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Crane re-tag :sha → :latest
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/crane@v0.91.0
+          call: >-
+            copy
+            --source ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+            --target ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest
+            --source-registry ${{ env.REGISTRY }}
+            --source-username ${{ github.actor }}
+            --source-password env:REGISTRY_PASSWORD
+            --target-registry ${{ env.REGISTRY }}
+            --target-username ${{ github.actor }}
+            --target-password env:REGISTRY_PASSWORD
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Publish Summary
+        run: |
+          {
+            echo "## 🚀 sthings-ansible published to ghcr.io"
+            echo ""
+            echo "Built once as \`:${{ github.sha }}\`, crane-promoted to:"
+            echo ""
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}\`"
+            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:latest\`"
+          } >> "$GITHUB_STEP_SUMMARY"
