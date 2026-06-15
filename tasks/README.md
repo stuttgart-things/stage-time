@@ -88,3 +88,67 @@ EOF
 ```
 
 </details>
+
+<details><summary>EXECUTE OPENTOFU</summary>
+
+Runs `tofu init` followed by a `plan`, `apply` or `destroy` against the
+configuration in the `source` workspace. Per-key variables (`TF_VARS`) and a
+base64 tfvars file (`TF_VARS_FILE`) are written as `*.auto.tfvars`. Provider
+credentials are injected from an optional secret (`credentials-secret-name`)
+whose keys become environment variables (e.g. `AWS_ACCESS_KEY_ID`,
+`ARM_CLIENT_ID`, `GOOGLE_CREDENTIALS`, `TF_VAR_*`).
+
+Private CA certificates can be trusted per run (not baked into the image) by
+binding the optional `ca-certs` workspace; any `*.crt` / `*.pem` files there
+are appended to the system trust store via `SSL_CERT_FILE`.
+
+Optionally create a credentials secret and a CA cert secret:
+
+```bash
+kubectl create secret generic terraform-credentials \
+--from-literal=AWS_ACCESS_KEY_ID=<KEY> \
+--from-literal=AWS_SECRET_ACCESS_KEY=<SECRET> \
+-n tekton-ci
+
+kubectl create secret generic private-ca \
+--from-file=ca.crt=./my-private-ca.crt \
+-n tekton-ci
+```
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: execute-tofu-test
+  namespace: tekton-ci
+spec:
+  taskRef:
+    name: execute-tofu
+  params:
+    - name: ACTION
+      value: "apply"
+    - name: AUTO_APPROVE
+      value: "true"
+    - name: SUB_DIRECTORY
+      value: "terraform"
+    - name: TF_VARS
+      value:
+        - "region+-'eu-central-1'"
+        - "instance_count+-2"
+    - name: BACKEND_CONFIG
+      value:
+        - "bucket+-my-tf-state"
+        - "key+-stage-time/terraform.tfstate"
+  workspaces:
+    - name: source
+      persistentVolumeClaim:
+        claimName: terraform-source-pvc
+    - name: ca-certs       # optional - private CA trust, per run
+      secret:
+        secretName: private-ca
+EOF
+```
+
+</details>
