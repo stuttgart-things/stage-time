@@ -59,6 +59,10 @@ _validateInventory = _flat_params?.validateInventory or option("validateInventor
 # not just flat -D options.
 assert _ansibleWorkingImage.startswith("ghcr.io/") or _ansibleWorkingImage.startswith("docker.io/") or _ansibleWorkingImage.startswith("quay.io/"), "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
 assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a valid GitHub HTTPS URL"
+assert len(_gitRevision) > 0, "gitRevision cannot be empty"
+# Storage validation (moved from the former vars.k schema.StorageConfig).
+assert _storageSize.endswith("Mi") or _storageSize.endswith("Gi"), "storageSize must end with 'Mi' or 'Gi'"
+assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"], "storageAccessModes must be ReadWriteOnce, ReadWriteMany, or ReadOnlyMany"
 
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False

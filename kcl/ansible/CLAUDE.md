@@ -13,8 +13,8 @@ Context for working on this KCL module with Claude Code.
 - Published manually to `oci://ghcr.io/stuttgart-things/kcl-tekton-pr`
   (the OCI tag = `version` in `kcl.mod`). There is **no** CI that publishes
   it — see "Publish" below.
-- Files: `main.k` (logic), `schema.k`, `defaults.k`, `values.k`, `vars.k`,
-  `README.md`.
+- Files: `main.k` (field resolution + validation + render), `defaults.k`
+  (static run settings), `vars.k` (re-exports + name prefix), `README.md`.
 
 ## Invocation contract (two modes)
 `main.k` reads `option("params")` and supports both:
