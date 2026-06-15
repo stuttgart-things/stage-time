@@ -1,0 +1,147 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: decrypt-sops
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/categories: Security
+    tekton.dev/pipelines.minVersion: "0.50.0"
+    tekton.dev/tags: "sops,secrets,decrypt"
+    tekton.dev/platforms: "linux/amd64,linux/arm64"
+    tekton.dev/displayName: "sops decrypt"
+spec:
+  description: >-
+    Decrypt SOPS-encrypted files from the `input` workspace and write the
+    plaintext results to the `output` workspace, preserving the relative
+    directory structure.
+
+    Decryption keys are provided through the optional `sops-keys` workspace.
+    An age key file (SOPS_AGE_KEY_FILE) and/or a PGP private key are supported.
+  workspaces:
+    - name: input
+      description: Workspace containing the SOPS-encrypted files.
+      optional: false
+    - name: output
+      description: Workspace the decrypted files are written to.
+      optional: false
+    - name: sops-keys
+      description: >-
+        Optional workspace holding decryption keys. May contain an age key
+        file (see ageKeyFile param) and/or an ASCII-armored PGP private key
+        (see pgpKeyFile param).
+      optional: true
+  params:
+    - name: sopsImage
+      description: The image providing the sops binary that this Task runs.
+      type: string
+      default: "ghcr.io/getsops/sops:v3.9.4-alpine"
+    - name: files
+      description: >-
+        Whitespace-separated list of files to decrypt, relative to the
+        `input` workspace. When empty, all files matching `filePattern` are
+        decrypted.
+      type: string
+      default: ""
+    - name: filePattern
+      description: >-
+        find(1) -name pattern used to discover encrypted files when `files`
+        is empty.
+      type: string
+      default: "*.sops.yaml"
+    - name: outputSubdirectory
+      description: Subdirectory inside the `output` workspace to write to.
+      type: string
+      default: ""
+    - name: ageKeyFile
+      description: >-
+        Name of the age key file inside the `sops-keys` workspace. Ignored if
+        the file is not present.
+      type: string
+      default: "keys.txt"
+    - name: pgpKeyFile
+      description: >-
+        Name of an ASCII-armored PGP private key inside the `sops-keys`
+        workspace to import. Ignored if the file is not present.
+      type: string
+      default: "key.asc"
+    - name: verbose
+      description: Log the commands that are executed during decryption.
+      type: string
+      default: "true"
+  steps:
+    - name: decrypt
+      image: "$(params.sopsImage)"
+      env:
+        - name: PARAM_FILES
+          value: $(params.files)
+        - name: PARAM_FILE_PATTERN
+          value: $(params.filePattern)
+        - name: PARAM_OUTPUT_SUBDIRECTORY
+          value: $(params.outputSubdirectory)
+        - name: PARAM_AGE_KEY_FILE
+          value: $(params.ageKeyFile)
+        - name: PARAM_PGP_KEY_FILE
+          value: $(params.pgpKeyFile)
+        - name: PARAM_VERBOSE
+          value: $(params.verbose)
+        - name: WORKSPACE_INPUT_PATH
+          value: $(workspaces.input.path)
+        - name: WORKSPACE_OUTPUT_PATH
+          value: $(workspaces.output.path)
+        - name: WORKSPACE_SOPS_KEYS_BOUND
+          value: $(workspaces.sops-keys.bound)
+        - name: WORKSPACE_SOPS_KEYS_PATH
+          value: $(workspaces.sops-keys.path)
+      script: |-
+        #!/usr/bin/env sh
+        set -eu
+
+        if [ "${PARAM_VERBOSE}" = "true" ] ; then
+          set -x
+        fi
+
+        # Configure decryption keys from the sops-keys workspace, if bound.
+        if [ "${WORKSPACE_SOPS_KEYS_BOUND}" = "true" ] ; then
+          if [ -f "${WORKSPACE_SOPS_KEYS_PATH}/${PARAM_AGE_KEY_FILE}" ] ; then
+            export SOPS_AGE_KEY_FILE="${WORKSPACE_SOPS_KEYS_PATH}/${PARAM_AGE_KEY_FILE}"
+            echo "Using age key file: ${SOPS_AGE_KEY_FILE}"
+          fi
+          if [ -f "${WORKSPACE_SOPS_KEYS_PATH}/${PARAM_PGP_KEY_FILE}" ] ; then
+            export GNUPGHOME="$(mktemp -d)"
+            gpg --batch --import "${WORKSPACE_SOPS_KEYS_PATH}/${PARAM_PGP_KEY_FILE}"
+            echo "Imported PGP key: ${WORKSPACE_SOPS_KEYS_PATH}/${PARAM_PGP_KEY_FILE}"
+          fi
+        fi
+
+        OUTPUT_DIR="${WORKSPACE_OUTPUT_PATH}/${PARAM_OUTPUT_SUBDIRECTORY}"
+        mkdir -p "${OUTPUT_DIR}"
+
+        cd "${WORKSPACE_INPUT_PATH}"
+
+        # Build the list of files to decrypt.
+        if [ -n "${PARAM_FILES}" ] ; then
+          FILE_LIST="${PARAM_FILES}"
+        else
+          FILE_LIST="$(find . -type f -name "${PARAM_FILE_PATTERN}" | sed 's|^\./||')"
+        fi
+
+        if [ -z "${FILE_LIST}" ] ; then
+          echo "No files to decrypt (files='${PARAM_FILES}', pattern='${PARAM_FILE_PATTERN}')." >&2
+          exit 1
+        fi
+
+        for f in ${FILE_LIST} ; do
+          if [ ! -f "${f}" ] ; then
+            echo "Encrypted file not found: ${f}" >&2
+            exit 1
+          fi
+          dest="${OUTPUT_DIR}/${f}"
+          mkdir -p "$(dirname "${dest}")"
+          echo "Decrypting ${f} -> ${dest}"
+          sops --decrypt "${f}" > "${dest}"
+        done
+
+        echo "Decrypted files written to ${OUTPUT_DIR}:"
+        ls -alR "${OUTPUT_DIR}"
