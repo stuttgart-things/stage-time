@@ -162,8 +162,12 @@ spec:
         params:
           - name: url
             value: https://github.com/tektoncd/catalog.git
+          # Pinned to a fixed commit for reproducibility/supply-chain safety
+          # (external dependency). tektoncd/catalog main @ 2026-06; bump
+          # deliberately. The stage-time self-reference above stays on `main`
+          # so local task edits still auto-propagate.
           - name: revision
-            value: main
+            value: 7ea2968e224633b4967d60217b33bb4d38fa53d9
           - name: pathInRepo
             value: task/git-clone/0.10/git-clone.yaml
       workspaces:

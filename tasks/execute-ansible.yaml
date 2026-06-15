@@ -123,6 +123,13 @@ spec:
       privileged: false
       runAsNonRoot: true
       runAsUser: 65532
+    # Requests only (no limits): give the scheduler sizing info without
+    # capping the variable footprint of ansible runs / galaxy installs,
+    # which a too-low memory limit could OOM-kill.
+    computeResources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
   steps:
     - name: create-inventory-vars
       args:
