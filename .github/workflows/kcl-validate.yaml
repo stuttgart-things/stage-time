@@ -1,0 +1,30 @@
+---
+name: KCL Validate
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  kcl-validate:
+    name: KCL Validate
+    strategy:
+      fail-fast: false
+      matrix:
+        module-dir:
+          - kcl/ansible
+          - kcl/ansible-run
+          - kcl/buildah
+    # NOTE: requires call-kcl-validate.yaml to be merged into
+    # github-workflow-templates' main branch first.
+    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-kcl-validate.yaml@main
+    with:
+      module-dir: ${{ matrix.module-dir }}
+    secrets: inherit
