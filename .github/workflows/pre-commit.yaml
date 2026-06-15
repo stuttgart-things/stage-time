@@ -18,8 +18,8 @@ jobs:
     uses: stuttgart-things/github-workflow-templates/.github/workflows/call-pre-commit.yaml@main
     with:
       config-path: .pre-commit-config.yaml
-      # hadolint-docker shells out to `docker`, which isn't available inside the
-      # Dagger pre-commit sandbox. Skip it here; Dockerfile linting is tracked as
-      # a follow-up in #34 (separate hadolint job or hadolint in the linting image).
-      skip-hooks: hadolint-docker
+      # v0.119.0 bundles the hadolint static binary on PATH, so the local
+      # `hadolint` (language: system) hook in .pre-commit-config.yaml runs
+      # natively in-container — no Docker needed, nothing to skip.
+      linting-module-version: v0.119.0
     secrets: inherit # pragma: allowlist secret
