@@ -170,8 +170,11 @@ per run (not baked into the image) by binding the optional `ca-certs` workspace;
 any `*.crt` / `*.pem` files there are appended to the system trust store via
 `SSL_CERT_FILE`.
 
-When the template uses the manifest post-processor (`packer-manifest.json`), the
-last build's `artifact_id` is surfaced as the `artifact-id` result.
+The name of the built template is parsed from packer's artifact log line and
+surfaced as the `template-name` result; a build that produces no artifact fails
+the task (downstream promote/rename steps depend on that name). Vault is wired
+the same way as the ansible/tofu tasks — `VAULT_ADDR`/`VAULT_ROLE_ID`/
+`VAULT_SECRET_ID`/`VAULT_TOKEN` are read from the `vault` secret.
 
 ```bash
 kubectl create secret generic packer-credentials \

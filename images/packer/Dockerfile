@@ -2,11 +2,11 @@
 FROM ghcr.io/stuttgart-things/sthings-alpine:3.11.14-alpine3.23
 
 # METADATA INFORMATION
-LABEL version=1.12.0
+LABEL version=1.15.1
 LABEL maintainer="Patrick Hermann <patrick.hermann@sva.de>"
 
 # SOFTWARE
-ARG PACKER_VERSION=1.12.0
+ARG PACKER_VERSION=1.15.1
 ARG YQ_VERSION=4.53.2
 # Plugin versions baked into the image. They must satisfy the
 # `required_plugins` constraints in the templates this image builds; if a

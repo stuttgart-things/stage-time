@@ -74,7 +74,7 @@ spec:
     - name: WORKING_IMAGE
       description: the image on which packer will run
       type: string
-      default: "ghcr.io/stuttgart-things/sthings-packer:1.12.0"
+      default: "ghcr.io/stuttgart-things/sthings-packer:1.15.1"
     - name: credentials-secret-name
       description: >-
         name of an optional secret whose keys are injected as environment
@@ -98,6 +98,10 @@ spec:
       description: namespace key in the secret
       type: string
       default: "VAULT_NAMESPACE"
+    - name: vault-secret-key-token
+      description: vault token key in the secret
+      type: string
+      default: "VAULT_TOKEN"
     - name: vault-secret-name
       description: name of the vault secret
       type: string
@@ -105,10 +109,11 @@ spec:
   results:
     - name: action-performed
       description: the packer action that was executed
-    - name: artifact-id
+    - name: template-name
       description: >-
-        best-effort artifact id of the last build, read from a
-        packer-manifest.json (manifest post-processor) if present; empty otherwise
+        name of the template/artifact produced by a build, parsed from packer's
+        artifact log line. A build that produces no artifact fails the task
+        (downstream promote/rename steps depend on this name)
   stepTemplate:
     workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
     image: "$(params.WORKING_IMAGE)"
@@ -248,6 +253,12 @@ spec:
               key: $(params.vault-secret-key-approleSecret)
               name: $(params.vault-secret-name)
               optional: true
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-token)
+              name: $(params.vault-secret-name)
+              optional: true
       envFrom:
         - secretRef:
             name: $(params.credentials-secret-name)
@@ -304,18 +315,27 @@ spec:
               key: $(params.vault-secret-key-approleSecret)
               name: $(params.vault-secret-name)
               optional: true
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-token)
+              name: $(params.vault-secret-name)
+              optional: true
       envFrom:
         - secretRef:
             name: $(params.credentials-secret-name)
             optional: true
       script: |
-        #!/usr/bin/env sh
-        set -eu
+        #!/usr/bin/env bash
+        # bash (not sh): the build branch relies on PIPESTATUS to preserve
+        # packer's exit code through the `tee` pipe. The sthings-packer image
+        # ships bash.
+        set -euo pipefail
 
         # Always declare the results so Tekton does not warn about unset
-        # results; the build branch overwrites artifact-id on success.
+        # results; the build branch overwrites template-name on success.
         printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
-        printf '' > "$(results.artifact-id.path)"
+        printf '' > "$(results.template-name.path)"
 
         ONLY_FLAG=""
         if [ -n "${ONLY}" ]; then
@@ -340,18 +360,32 @@ spec:
             packer validate ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}"
             ;;
           build)
+            # Stream packer output live (tee) while keeping a copy to parse the
+            # produced template name from. PIPESTATUS preserves packer's exit
+            # code so a failed build is not masked by tee's success.
+            set +e
             # shellcheck disable=SC2086
-            packer build -color=false ${FORCE_FLAG} ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}"
-
-            # Best-effort: surface the last artifact id when the template uses
-            # the manifest post-processor (writes packer-manifest.json).
-            if [ -f packer-manifest.json ]; then
-              ARTIFACT=$(yq -p=json -o=tsv '.builds[-1].artifact_id // ""' packer-manifest.json 2>/dev/null || echo "")
-              printf '%s' "${ARTIFACT}" > "$(results.artifact-id.path)"
-              echo "artifact-id: ${ARTIFACT}"
-            else
-              echo "no packer-manifest.json found - artifact-id left empty"
+            packer build -color=false ${FORCE_FLAG} ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}" 2>&1 | tee /tmp/packer-build.log
+            rc=${PIPESTATUS[0]}
+            set -e
+            if [ "${rc}" -ne 0 ]; then
+              echo "ERROR: packer build failed (rc=${rc})" >&2
+              exit "${rc}"
             fi
+
+            # Parse the built template name from packer's artifact log line
+            # (e.g. `... artifact []string{"0", "id", "<template>"}`). No
+            # fabricated fallback: if no artifact was produced (no-op build or
+            # changed log format) we must FAIL, otherwise downstream
+            # promote/rename steps act on a template that does not exist.
+            TEMPLATE_NAME=$(sed -n 's/.*"0", "id", "\([^"]*\)".*/\1/p' /tmp/packer-build.log | tail -1)
+            if [ -z "${TEMPLATE_NAME}" ]; then
+              echo "ERROR: packer build finished but no template name could be extracted from the log." >&2
+              echo "ERROR: this means no artifact was produced (no-op build) or the log format changed." >&2
+              exit 1
+            fi
+            printf '%s' "${TEMPLATE_NAME}" > "$(results.template-name.path)"
+            echo "template-name: ${TEMPLATE_NAME}"
             ;;
           *)
             echo "ERROR: unsupported ACTION '${ACTION}' (expected init, validate or build)" >&2
