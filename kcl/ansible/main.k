@@ -37,6 +37,23 @@ _ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVar
 _ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 _ansibleCredentialsSecretName = _flat_params?.ansibleCredentialsSecretName or _env?.ansibleCredentialsSecretName or option("ansibleCredentialsSecretName") or "ansible-credentials"
 
+# Previously these only resolved from `-D` options via values.k, so setting
+# them in an XR spec (composition mode) was silently ignored. Extract them
+# here so `oxr.spec.<field>` is honoured, same precedence as the fields above.
+_ansibleCredentialsUserKey = _flat_params?.ansibleCredentialsUserKey or option("ansibleCredentialsUserKey") or "ANSIBLE_USER"
+_ansibleCredentialsPasswordKey = _flat_params?.ansibleCredentialsPasswordKey or option("ansibleCredentialsPasswordKey") or "ANSIBLE_PASSWORD"
+_createInventory = _flat_params?.createInventory or option("createInventory") or "true"
+_ansibleTargetHost = _flat_params?.ansibleTargetHost or option("ansibleTargetHost") or "all"
+_gitWorkspaceSubdirectory = _flat_params?.gitWorkspaceSubdirectory or option("gitWorkspaceSubdirectory") or "/ansible/workdir/"
+_installExtraRoles = _flat_params?.installExtraRoles or option("installExtraRoles") or "true"
+_installExtraCollections = _flat_params?.installExtraCollections or option("installExtraCollections") or "true"
+_userHome = _flat_params?.userHome or option("userHome") or "/home/nonroot"
+_vaultSecretName = _flat_params?.vaultSecretName or option("vaultSecretName") or "vault"
+_inventory = _flat_params?.inventory or option("inventory") or ""
+_varsFile = _flat_params?.varsFile or option("varsFile") or ""
+_ansibleVerbosity = _flat_params?.ansibleVerbosity or option("ansibleVerbosity") or "2"
+_validateInventory = _flat_params?.validateInventory or option("validateInventory") or "true"
+
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
 _crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or "tekton-pipeline-run"
@@ -86,6 +103,19 @@ _pipeline_params_override = {
     ansibleVarsFile = _ansibleVarsFile
     ansibleWorkingImage = _ansibleWorkingImage
     ansibleCredentialsSecretName = _ansibleCredentialsSecretName
+    ansibleCredentialsUserKey = _ansibleCredentialsUserKey
+    ansibleCredentialsPasswordKey = _ansibleCredentialsPasswordKey
+    createInventory = _createInventory
+    ansibleTargetHost = _ansibleTargetHost
+    gitWorkspaceSubdirectory = _gitWorkspaceSubdirectory
+    installExtraRoles = _installExtraRoles
+    installExtraCollections = _installExtraCollections
+    userHome = _userHome
+    vaultSecretName = _vaultSecretName
+    inventory = _inventory
+    varsFile = _varsFile
+    ansibleVerbosity = _ansibleVerbosity
+    validateInventory = _validateInventory
     gitRepoUrl = _gitRepoUrl
     gitRevision = _gitRevision
 }
