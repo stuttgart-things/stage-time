@@ -1,24 +1,5 @@
-# Default pipeline parameters
-_default_params = {
-    createInventory = "false"
-    ansibleTargetHost = "all"
-    gitWorkspaceSubdirectory = "/ansible/workdir/"
-    # pragma: allowlist secret
-    vaultSecretName = "vault"
-    installExtraRoles = "true"
-    installExtraCollections = "true"
-    # Add these new default parameters:
-    ansibleVarsInventory = []
-    ansibleVarsFile = []
-    userHome = "/home/nonroot"
-    # pragma: allowlist secret
-    ansibleCredentialsSecretName = "ansible-credentials"
-    ansibleCredentialsUserKey = "ANSIBLE_USER"
-    # pragma: allowlist secret
-    ansibleCredentialsPasswordKey = "ANSIBLE_PASSWORD"
-    varsFile = ""
-}
-
+# Static, non-field pipeline-run settings.
+# Per-field default values live in main.k (single source of truth).
 _task_run_template = {
     serviceAccountName = "default"
 }

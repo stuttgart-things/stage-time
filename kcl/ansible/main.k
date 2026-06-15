@@ -54,6 +54,12 @@ _varsFile = _flat_params?.varsFile or option("varsFile") or ""
 _ansibleVerbosity = _flat_params?.ansibleVerbosity or option("ansibleVerbosity") or "2"
 _validateInventory = _flat_params?.validateInventory or option("validateInventory") or "true"
 
+# Input validation (consolidated from the former values.k). Asserts on the
+# resolved values, so it now also covers composition-mode oxr.spec inputs,
+# not just flat -D options.
+assert _ansibleWorkingImage.startswith("ghcr.io/") or _ansibleWorkingImage.startswith("docker.io/") or _ansibleWorkingImage.startswith("quay.io/"), "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
+assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a valid GitHub HTTPS URL"
+
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
 _crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or "tekton-pipeline-run"
@@ -131,7 +137,7 @@ _pipelineRun = tekton.PipelineRun {
             resolver = "git"
             params = [{name = k, value = v} for k, v in _git_config_override]
         }
-        params = [{name = k, value = v} for k, v in (vars._pipeline_params | _pipeline_params_override)]
+        params = [{name = k, value = v} for k, v in _pipeline_params_override]
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
         workspaces = [_workspace_config_override]

@@ -1,10 +1,6 @@
 # vars.k
 import .defaults
-import .values
 import .schema
-
-# Merge defaults with overrides (overrides take precedence)
-_pipeline_params = defaults._default_params | values._override_params
 
 # Re-export from defaults so main.k can access them
 _task_run_template = defaults._task_run_template
