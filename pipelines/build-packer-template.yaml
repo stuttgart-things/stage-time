@@ -1,0 +1,161 @@
+---
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: build-packer-template
+spec:
+  workspaces:
+    - name: shared-workspace
+    - name: sshCredentials
+      optional: true
+    - name: caCerts
+      optional: true
+  params:
+    - name: packerAction
+      type: string
+      default: "build"
+      description: packer action to perform (init, validate or build)
+    - name: packerTemplate
+      type: string
+      default: "."
+      description: packer template file or directory to act on (relative to working dir)
+    - name: packerOnly
+      type: string
+      default: ""
+      description: comma-separated build sources to restrict the build to (packer -only)
+    - name: packerForce
+      type: string
+      default: "false"
+      description: force a build, overwriting any existing artifacts (packer -force)
+    - name: packerRunInit
+      type: string
+      default: "true"
+      description: run "packer init" before validate/build to install required plugins
+    - name: packerVars
+      type: array
+      default: []
+      description: extra variables, array of key+-value (written to tekton.auto.pkrvars.hcl)
+    - name: packerVarsFile
+      type: string
+      default: ""
+      description: pkrvars file as b64 (merged via *.auto.pkrvars.hcl, takes precedence over packerVars)
+    - name: packerInitExtraArgs
+      type: string
+      default: ""
+      description: extra arguments passed to packer init
+    - name: packerBuildExtraArgs
+      type: string
+      default: ""
+      description: extra arguments passed to packer validate/build
+    - name: packerLog
+      type: string
+      default: ""
+      description: enable packer debug logging (1 to enable, empty to disable)
+    - name: packerWorkingImage
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:1.15.1"
+      description: the image on which packer will run
+    - name: credentialsSecretName
+      type: string
+      default: "packer-credentials"
+      description: name of the secret whose keys are injected as env vars (builder credentials)
+    - name: vaultSecretName
+      type: string
+      default: "vault"
+      description: name of the vault secret
+    - name: userHome
+      type: string
+      default: "/home/nonroot"
+      description: absolute path to the user's home directory
+    - name: gitRepoUrl
+      type: string
+      default: ""
+      description: source git repo (holds the packer templates)
+    - name: gitRevision
+      type: string
+      default: "main"
+      description: revision of source git repo
+    - name: gitWorkspaceSubdirectory
+      type: string
+      default: ""
+      description: subdirectory on workspace
+  results:
+    - name: template-name
+      description: name of the template/artifact produced by the build
+      value: $(tasks.execute-packer.results.template-name)
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/tektoncd/catalog.git
+          # Pinned to a fixed commit for reproducibility/supply-chain safety
+          # (external dependency). tektoncd/catalog main @ 2026-06; bump
+          # deliberately.
+          - name: revision
+            value: 7ea2968e224633b4967d60217b33bb4d38fa53d9 # pragma: allowlist secret (git commit SHA, not a secret)
+          - name: pathInRepo
+            value: task/git-clone/0.10/git-clone.yaml
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+        - name: ssh-directory
+          workspace: sshCredentials
+      params:
+        - name: deleteExisting
+          value: 'true'
+        - name: revision
+          value: $(params.gitRevision)
+        - name: subdirectory
+          value: $(params.gitWorkspaceSubdirectory)
+        - name: url
+          value: $(params.gitRepoUrl)
+    - name: execute-packer
+      runAfter:
+        - fetch-repository
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/execute-packer.yaml
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: ACTION
+          value: $(params.packerAction)
+        - name: TEMPLATE
+          value: $(params.packerTemplate)
+        - name: ONLY
+          value: $(params.packerOnly)
+        - name: FORCE
+          value: $(params.packerForce)
+        - name: RUN_INIT
+          value: $(params.packerRunInit)
+        - name: PKR_VARS
+          value: $(params.packerVars[*])
+        - name: PKR_VARS_FILE
+          value: $(params.packerVarsFile)
+        - name: INIT_EXTRA_ARGS
+          value: $(params.packerInitExtraArgs)
+        - name: BUILD_EXTRA_ARGS
+          value: $(params.packerBuildExtraArgs)
+        - name: PACKER_LOG
+          value: $(params.packerLog)
+        - name: WORKING_IMAGE
+          value: $(params.packerWorkingImage)
+        - name: SUB_DIRECTORY
+          value: $(params.gitWorkspaceSubdirectory)
+        - name: USER_HOME
+          value: $(params.userHome)
+        - name: credentials-secret-name
+          value: $(params.credentialsSecretName)
+        - name: vault-secret-name
+          value: $(params.vaultSecretName)

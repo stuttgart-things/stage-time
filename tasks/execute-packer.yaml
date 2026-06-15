@@ -1,0 +1,398 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: execute-packer
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/categories: "infrastructure"
+    tekton.dev/pipelines.minVersion: "0.17.0"
+    tekton.dev/platforms: "linux/amd64,linux/arm64"
+    tekton.dev/tags: "packer,image-build,iac"
+spec:
+  description: build vm templates / golden images with packer (init/validate/build) with enhanced security and error handling
+  workspaces:
+    - name: source
+      description: holds the working data (packer HCL templates)
+      optional: false
+    - name: ca-certs
+      description: >-
+        optional workspace with private CA certificates (*.crt / *.pem) that
+        are trusted per run. They are appended to the system trust store at
+        runtime (via SSL_CERT_FILE) and never baked into the image.
+      optional: true
+  params:
+    - name: ACTION
+      description: packer action to perform (init, validate or build)
+      type: string
+      default: "build"
+    - name: SUB_DIRECTORY
+      description: subdirectory of workspace containing the packer template(s)
+      type: string
+      default: ""
+    - name: TEMPLATE
+      description: packer template file or directory to act on (relative to working dir)
+      type: string
+      default: "."
+    - name: ONLY
+      description: comma-separated build sources to restrict the build to (packer -only). Empty = all
+      type: string
+      default: ""
+    - name: FORCE
+      description: force a build, overwriting any existing artifacts (packer -force)
+      type: string
+      default: "false"
+    - name: RUN_INIT
+      description: run "packer init" before validate/build to install required plugins
+      type: string
+      default: "true"
+    - name: PKR_VARS
+      description: extra variables, array of key+-value (later written to tekton.auto.pkrvars.hcl)
+      type: array
+      default: []
+    - name: PKR_VARS_FILE
+      description: pkrvars file as b64 (merged via *.auto.pkrvars.hcl, takes precedence over PKR_VARS)
+      type: string
+      default: ""
+    - name: INIT_EXTRA_ARGS
+      description: extra arguments passed to packer init. WARNING - must be sanitized to avoid command injection
+      type: string
+      default: ""
+    - name: BUILD_EXTRA_ARGS
+      description: extra arguments passed to packer validate/build. WARNING - must be sanitized to avoid command injection
+      type: string
+      default: ""
+    - name: PACKER_LOG
+      description: enable packer debug logging (1 to enable, empty to disable)
+      type: string
+      default: ""
+    - name: USER_HOME
+      description: absolute path to the user's home directory
+      type: string
+      default: "/home/nonroot"
+    - name: WORKING_IMAGE
+      description: the image on which packer will run
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:1.15.1"
+    - name: credentials-secret-name
+      description: >-
+        name of an optional secret whose keys are injected as environment
+        variables (e.g. vSphere/Proxmox/Harvester builder credentials such as
+        PKR_VAR_vsphere_password, PROXMOX_TOKEN, ...)
+      type: string
+      default: "packer-credentials"
+    - name: vault-secret-key-addr
+      description: vault addr key in the secret
+      type: string
+      default: "VAULT_ADDR"
+    - name: vault-secret-key-approleId
+      description: approle id key in the secret
+      type: string
+      default: "VAULT_ROLE_ID"
+    - name: vault-secret-key-approleSecret
+      description: approle secret key in the secret
+      type: string
+      default: "VAULT_SECRET_ID"
+    - name: vault-secret-key-namespace
+      description: namespace key in the secret
+      type: string
+      default: "VAULT_NAMESPACE"
+    - name: vault-secret-key-token
+      description: vault token key in the secret
+      type: string
+      default: "VAULT_TOKEN"
+    - name: vault-secret-name
+      description: name of the vault secret
+      type: string
+      default: "vault"
+  results:
+    - name: action-performed
+      description: the packer action that was executed
+    - name: template-name
+      description: >-
+        name of the template/artifact produced by a build, parsed from packer's
+        artifact log line. A build that produces no artifact fails the task
+        (downstream promote/rename steps depend on this name)
+  stepTemplate:
+    workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
+    image: "$(params.WORKING_IMAGE)"
+    env:
+      - name: HOME
+        value: $(params.USER_HOME)
+      - name: PACKER_LOG
+        value: $(params.PACKER_LOG)
+      # Per-run CA trust: the trust-ca-certs step writes a combined bundle
+      # (system roots + any private CAs from the ca-certs workspace) here.
+      # Go (packer/plugins) and git honor these, so nothing is baked in.
+      - name: SSL_CERT_FILE
+        value: $(workspaces.source.path)/$(params.SUB_DIRECTORY)/.tekton-ca-bundle.crt
+      - name: GIT_SSL_CAINFO
+        value: $(workspaces.source.path)/$(params.SUB_DIRECTORY)/.tekton-ca-bundle.crt
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 65532
+    # Requests only (no limits): give the scheduler sizing info without
+    # capping the variable footprint of packer runs / plugin downloads,
+    # which a too-low memory limit could OOM-kill.
+    computeResources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+  steps:
+    - name: trust-ca-certs
+      env:
+        - name: CA_CERTS_BOUND
+          value: $(workspaces.ca-certs.bound)
+        - name: CA_CERTS_PATH
+          value: $(workspaces.ca-certs.path)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        # Build a combined CA bundle: system roots first, then any private
+        # CAs mounted via the ca-certs workspace. SSL_CERT_FILE (set in the
+        # stepTemplate) points every later step at this file. When no
+        # ca-certs workspace is bound the bundle equals the system store, so
+        # behaviour is unchanged.
+        BUNDLE="${SSL_CERT_FILE}"
+        : > "${BUNDLE}"
+
+        if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+          cat /etc/ssl/certs/ca-certificates.crt >> "${BUNDLE}"
+        fi
+
+        if [ "${CA_CERTS_BOUND}" = "true" ]; then
+          echo "Appending private CA certificates from ca-certs workspace"
+          found=0
+          for crt in "${CA_CERTS_PATH}"/*.crt "${CA_CERTS_PATH}"/*.pem; do
+            [ -f "${crt}" ] || continue
+            echo "  + ${crt}"
+            printf '\n' >> "${BUNDLE}"
+            cat "${crt}" >> "${BUNDLE}"
+            found=1
+          done
+          [ "${found}" = "0" ] && echo "  (no *.crt / *.pem files found)"
+        else
+          echo "No ca-certs workspace bound - using system trust store only"
+        fi
+
+        echo "CA bundle written to ${BUNDLE}"
+
+    - name: create-pkrvars
+      args:
+        - $(params.PKR_VARS[*])
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        echo "Creating tekton.auto.pkrvars.hcl"
+        rm -f ./tekton.auto.pkrvars.hcl
+        : > ./tekton.auto.pkrvars.hcl
+
+        for argument in "$@"; do
+          # Split on the FIRST '+-' only, so a value that itself contains
+          # '+-' is not mangled. Value typing is left to HCL (callers quote
+          # where a string is required, e.g. vm_name+-'ubuntu24').
+          echo "$argument" | sed -e "s/+-/ = /" >> ./tekton.auto.pkrvars.hcl
+        done
+
+        echo "Current tekton.auto.pkrvars.hcl contents:"
+        cat ./tekton.auto.pkrvars.hcl
+
+    - name: merge-pkrvars-file
+      env:
+        - name: PKR_VARS_FILE
+          value: $(params.PKR_VARS_FILE)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        if [ -z "${PKR_VARS_FILE}" ]; then
+          echo "pkrvars file is empty - nothing to merge"
+        else
+          # Written as *.auto.pkrvars.hcl so packer auto-loads it. It is loaded
+          # alphabetically after tekton.auto.pkrvars.hcl, so its values take
+          # precedence over the per-key PKR_VARS above.
+          echo "Decoding pkrvars file from base64 -> zz-override.auto.pkrvars.hcl"
+          echo "${PKR_VARS_FILE}" | base64 -d > ./zz-override.auto.pkrvars.hcl
+          echo "Contents:"
+          cat ./zz-override.auto.pkrvars.hcl
+        fi
+
+    - name: packer-init
+      env:
+        - name: RUN_INIT
+          value: $(params.RUN_INIT)
+        - name: TEMPLATE
+          value: $(params.TEMPLATE)
+        - name: INIT_EXTRA_ARGS
+          value: $(params.INIT_EXTRA_ARGS)
+        - name: VAULT_ADDR
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-addr)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-namespace)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_ROLE_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleId)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_SECRET_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleSecret)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-token)
+              name: $(params.vault-secret-name)
+              optional: true
+      envFrom:
+        - secretRef:
+            name: $(params.credentials-secret-name)
+            optional: true
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        if [ "${RUN_INIT}" != "true" ]; then
+          echo "Skipped packer init (RUN_INIT=${RUN_INIT})"
+          exit 0
+        fi
+
+        echo "=========================================="
+        echo "PACKER INIT"
+        echo "=========================================="
+        # INIT_EXTRA_ARGS is intentionally word-split.
+        # shellcheck disable=SC2086
+        packer init ${INIT_EXTRA_ARGS} "${TEMPLATE}"
+
+    - name: packer-action
+      env:
+        - name: ACTION
+          value: $(params.ACTION)
+        - name: TEMPLATE
+          value: $(params.TEMPLATE)
+        - name: ONLY
+          value: $(params.ONLY)
+        - name: FORCE
+          value: $(params.FORCE)
+        - name: BUILD_EXTRA_ARGS
+          value: $(params.BUILD_EXTRA_ARGS)
+        - name: VAULT_ADDR
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-addr)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-namespace)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_ROLE_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleId)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_SECRET_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleSecret)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-token)
+              name: $(params.vault-secret-name)
+              optional: true
+      envFrom:
+        - secretRef:
+            name: $(params.credentials-secret-name)
+            optional: true
+      script: |
+        #!/usr/bin/env bash
+        # bash (not sh): the build branch relies on PIPESTATUS to preserve
+        # packer's exit code through the `tee` pipe. The sthings-packer image
+        # ships bash.
+        set -euo pipefail
+
+        # Always declare the results so Tekton does not warn about unset
+        # results; the build branch overwrites template-name on success.
+        printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
+        printf '' > "$(results.template-name.path)"
+
+        ONLY_FLAG=""
+        if [ -n "${ONLY}" ]; then
+          ONLY_FLAG="-only=${ONLY}"
+        fi
+
+        FORCE_FLAG=""
+        if [ "${FORCE}" = "true" ]; then
+          FORCE_FLAG="-force"
+        fi
+
+        echo "=========================================="
+        echo "PACKER ${ACTION}"
+        echo "=========================================="
+
+        case "${ACTION}" in
+          init)
+            echo "init already handled by the packer-init step - nothing to do"
+            ;;
+          validate)
+            # shellcheck disable=SC2086
+            packer validate ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}"
+            ;;
+          build)
+            # Stream packer output live (tee) while keeping a copy to parse the
+            # produced template name from. PIPESTATUS preserves packer's exit
+            # code so a failed build is not masked by tee's success.
+            set +e
+            # shellcheck disable=SC2086
+            packer build -color=false ${FORCE_FLAG} ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}" 2>&1 | tee /tmp/packer-build.log
+            rc=${PIPESTATUS[0]}
+            set -e
+            if [ "${rc}" -ne 0 ]; then
+              echo "ERROR: packer build failed (rc=${rc})" >&2
+              exit "${rc}"
+            fi
+
+            # Parse the built template name from packer's artifact log line
+            # (e.g. `... artifact []string{"0", "id", "<template>"}`). No
+            # fabricated fallback: if no artifact was produced (no-op build or
+            # changed log format) we must FAIL, otherwise downstream
+            # promote/rename steps act on a template that does not exist.
+            TEMPLATE_NAME=$(sed -n 's/.*"0", "id", "\([^"]*\)".*/\1/p' /tmp/packer-build.log | tail -1)
+            if [ -z "${TEMPLATE_NAME}" ]; then
+              echo "ERROR: packer build finished but no template name could be extracted from the log." >&2
+              echo "ERROR: this means no artifact was produced (no-op build) or the log format changed." >&2
+              exit 1
+            fi
+            printf '%s' "${TEMPLATE_NAME}" > "$(results.template-name.path)"
+            echo "template-name: ${TEMPLATE_NAME}"
+            ;;
+          *)
+            echo "ERROR: unsupported ACTION '${ACTION}' (expected init, validate or build)" >&2
+            exit 1
+            ;;
+        esac
+
+        echo "=========================================="
+        echo "packer ${ACTION} completed successfully"
+        echo "=========================================="

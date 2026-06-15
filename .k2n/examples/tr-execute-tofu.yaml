@@ -29,4 +29,4 @@ spec:
     # optional - private CA trust, per run (omit if not needed)
     - name: ca-certs
       secret:
-        secretName: private-ca
+        secretName: private-ca # pragma: allowlist secret
