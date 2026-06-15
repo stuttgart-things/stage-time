@@ -4,7 +4,7 @@ kind: Task
 metadata:
   name: execute-ansible-playbooks
   labels:
-    app.kubernetes.io/version: "0.6"
+    app.kubernetes.io/version: "0.7"
   annotations:
     tekton.dev/categories: "configuration-mgmt"
     tekton.dev/pipelines.minVersion: "0.17.0"
@@ -146,12 +146,17 @@ spec:
             echo "Processing group: $group"
             echo "Processing host: $host"
 
-            if [[ $host =~ \[\".*\"\] ]]; then
-              echo "String is already correctly formatted: $host"
-            else
-              echo "Formatting string: $host"
-              host=$(echo "$host" | sed 's/\[/\[\"/g; s/\]/\"]/g')
-            fi
+            # POSIX: already-formatted host looks like ["..."] (starts ["
+            # ends "]). Replaces a bash-only [[ =~ ]] regex test.
+            case "$host" in
+              '['\"*\"']')
+                echo "String is already correctly formatted: $host"
+                ;;
+              *)
+                echo "Formatting string: $host"
+                host=$(echo "$host" | sed 's/\[/["/g; s/\]/"]/g')
+                ;;
+            esac
 
             echo "Final host value: $host"
             yq -i '.inventory_groups.host_groups.'"${group}"' += '"${host}" ./vars.yaml
@@ -172,7 +177,11 @@ spec:
 
         echo "Adding extra vars to vars.yaml"
         for argument in "$@"; do
-          echo "$argument" | sed -e "s/+-/: /g" >> vars.yaml
+          # Split on the FIRST '+-' only, so a value that itself contains
+          # '+-' is not mangled into broken YAML. Value typing is left to
+          # YAML (callers quote where a string is required, e.g.
+          # lvm_root_sizing+-'35%').
+          echo "$argument" | sed -e "s/+-/: /" >> vars.yaml
         done
 
         echo "Current vars.yaml contents:"
@@ -195,6 +204,8 @@ spec:
           echo "Contents to be merged:"
           cat ./to-be-merged.yaml
 
+          # Deep-merge, right operand wins: keys in the decoded VARS_FILE
+          # take precedence over the per-key EXTRA_VARS already in vars.yaml.
           yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' ./vars.yaml ./to-be-merged.yaml -i
           rm -f ./to-be-merged.yaml
         fi
@@ -329,6 +340,10 @@ spec:
       args:
         - $(params.PLAYBOOKS[*])
       env:
+        # Disabled so first-contact SSH to freshly-provisioned targets does
+        # not block on an interactive host-key prompt. Trade-off: no MITM
+        # protection on the SSH transport — acceptable for short-lived CI
+        # targets; reconsider when running against long-lived hosts.
         - name: ANSIBLE_HOST_KEY_CHECKING
           value: "False"
         - name: HOME
@@ -419,41 +434,46 @@ spec:
 
         for playbook in "$@"
         do
-          # Validate playbook exists (skip validation for collection playbooks)
-          # Collection playbooks follow the pattern: namespace.collection.playbook
-          if [[ ! "$playbook" =~ ^[a-z_]+\.[a-z_]+\.[a-z_]+ ]]; then
+          # Validate playbook exists (skip validation for collection playbooks).
+          # Collection playbooks follow the FQCN pattern namespace.collection.playbook.
+          # POSIX grep replaces a bash-only [[ =~ ]] regex test.
+          if printf '%s\n' "$playbook" | grep -Eq '^[a-z_]+\.[a-z_]+\.[a-z_]+'; then
+            echo "Detected collection playbook: $playbook (skipping file validation)"
+          else
             # This is a file-based playbook, validate it exists
             if [ ! -f "$playbook" ]; then
               echo "ERROR: Playbook file not found: $playbook"
               exit 1
             fi
-          else
-            echo "Detected collection playbook: $playbook (skipping file validation)"
           fi
 
           echo "=========================================="
           echo "Executing playbook: $playbook"
           echo "=========================================="
 
-          # Build ansible-playbook command
-          ANSIBLE_CMD="ansible-playbook ${VERBOSITY} \
-            -i $(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory \
-            -e inv_path=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory \
-            -e target_host=$(params.TARGET_HOST) \
-            -e path_to_vars_file=$(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars"
+          # Build the ansible-playbook argv with `set --` instead of a string
+          # + eval: positional parameters keep each option a single word, so
+          # paths or vars containing spaces/quotes can't be re-split or globbed.
+          INVENTORY_FILE="$(workspaces.source.path)/$(params.SUB_DIRECTORY)/inventory"
+          VARS_PATH="$(workspaces.source.path)/$(params.SUB_DIRECTORY)/vars"
+
+          set -- ansible-playbook
+          [ -n "${VERBOSITY}" ] && set -- "$@" "${VERBOSITY}"
+          set -- "$@" -i "${INVENTORY_FILE}" \
+            -e "inv_path=${INVENTORY_FILE}" \
+            -e "target_host=$(params.TARGET_HOST)" \
+            -e "path_to_vars_file=${VARS_PATH}"
 
           # Add credentials file if it exists
-          if [ -n "${CREDS_FILE}" ]; then
-            ANSIBLE_CMD="${ANSIBLE_CMD} --extra-vars @${CREDS_FILE}"
-          fi
+          [ -n "${CREDS_FILE}" ] && set -- "$@" --extra-vars "@${CREDS_FILE}"
 
           # Add playbook path
-          ANSIBLE_CMD="${ANSIBLE_CMD} ${playbook}"
+          set -- "$@" "${playbook}"
 
           # Show the exact command being executed
           echo "=========================================="
           echo "ANSIBLE COMMAND:"
-          echo "${ANSIBLE_CMD}"
+          echo "$*"
           echo "=========================================="
 
           # Show inventory contents
@@ -475,7 +495,7 @@ spec:
 
           # Execute playbook with shell tracing
           set -x
-          if eval ${ANSIBLE_CMD}; then
+          if "$@"; then
             set +x
             echo "Successfully executed playbook: $playbook"
             PLAYBOOKS_EXECUTED=$((PLAYBOOKS_EXECUTED + 1))
