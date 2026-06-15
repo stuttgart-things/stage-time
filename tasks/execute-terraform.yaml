@@ -1,0 +1,290 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: execute-terraform
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/categories: "infrastructure"
+    tekton.dev/pipelines.minVersion: "0.17.0"
+    tekton.dev/platforms: "linux/amd64,linux/arm64"
+    tekton.dev/tags: "terraform,iac"
+spec:
+  description: execute terraform (init/plan/apply/destroy) with enhanced security and error handling
+  workspaces:
+    - name: source
+      description: holds the working data (terraform configuration)
+      optional: false
+  params:
+    - name: ACTION
+      description: terraform action to perform (plan, apply or destroy)
+      type: string
+      default: "plan"
+    - name: SUB_DIRECTORY
+      description: subdirectory of workspace containing the terraform configuration
+      type: string
+      default: ""
+    - name: AUTO_APPROVE
+      description: skip interactive approval for apply/destroy
+      type: string
+      default: "true"
+    - name: TF_VARS
+      description: extra terraform variables, array of key+-value (later written to tekton.auto.tfvars)
+      type: array
+      default: []
+    - name: TF_VARS_FILE
+      description: tfvars file as b64 (merged via *.auto.tfvars, takes precedence over TF_VARS)
+      type: string
+      default: ""
+    - name: BACKEND_CONFIG
+      description: terraform backend config, array of key+-value passed as -backend-config
+      type: array
+      default: []
+    - name: INIT_EXTRA_ARGS
+      description: extra arguments passed to terraform init. WARNING - must be sanitized to avoid command injection
+      type: string
+      default: ""
+    - name: PLAN_EXTRA_ARGS
+      description: extra arguments passed to terraform plan/apply/destroy. WARNING - must be sanitized to avoid command injection
+      type: string
+      default: ""
+    - name: TF_LOG
+      description: terraform log level (TRACE, DEBUG, INFO, WARN, ERROR or empty to disable)
+      type: string
+      default: ""
+    - name: USER_HOME
+      description: absolute path to the user's home directory
+      type: string
+      default: "/home/nonroot"
+    - name: WORKING_IMAGE
+      description: the image on which terraform will run
+      type: string
+      default: "docker.io/hashicorp/terraform:1.9"
+    - name: credentials-secret-name
+      description: >-
+        name of an optional secret whose keys are injected as environment
+        variables (e.g. AWS_ACCESS_KEY_ID, ARM_CLIENT_ID, GOOGLE_CREDENTIALS,
+        TF_VAR_*)
+      type: string
+      default: "terraform-credentials"
+    - name: vault-secret-key-addr
+      description: vault addr key in the secret
+      type: string
+      default: "VAULT_ADDR"
+    - name: vault-secret-key-approleId
+      description: approle id key in the secret
+      type: string
+      default: "VAULT_ROLE_ID"
+    - name: vault-secret-key-approleSecret
+      description: approle secret key in the secret
+      type: string
+      default: "VAULT_SECRET_ID"
+    - name: vault-secret-key-namespace
+      description: namespace key in the secret
+      type: string
+      default: "VAULT_NAMESPACE"
+    - name: vault-secret-name
+      description: name of the vault secret
+      type: string
+      default: "vault"
+  results:
+    - name: action-performed
+      description: the terraform action that was executed
+  stepTemplate:
+    workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
+    image: "$(params.WORKING_IMAGE)"
+    env:
+      - name: HOME
+        value: $(params.USER_HOME)
+      - name: TF_IN_AUTOMATION
+        value: "true"
+      - name: TF_LOG
+        value: $(params.TF_LOG)
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 65532
+    # Requests only (no limits): give the scheduler sizing info without
+    # capping the variable footprint of terraform runs / provider downloads,
+    # which a too-low memory limit could OOM-kill.
+    computeResources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+  steps:
+    - name: create-tfvars
+      args:
+        - $(params.TF_VARS[*])
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        echo "Creating tekton.auto.tfvars"
+        rm -f ./tekton.auto.tfvars
+        : > ./tekton.auto.tfvars
+
+        for argument in "$@"; do
+          # Split on the FIRST '+-' only, so a value that itself contains
+          # '+-' is not mangled. Value typing is left to HCL (callers quote
+          # where a string is required, e.g. region+-'eu-central-1').
+          echo "$argument" | sed -e "s/+-/ = /" >> ./tekton.auto.tfvars
+        done
+
+        echo "Current tekton.auto.tfvars contents:"
+        cat ./tekton.auto.tfvars
+
+    - name: merge-tfvars-file
+      env:
+        - name: TF_VARS_FILE
+          value: $(params.TF_VARS_FILE)
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        if [ -z "${TF_VARS_FILE}" ]; then
+          echo "tfvars file is empty - nothing to merge"
+        else
+          # Written as *.auto.tfvars so terraform auto-loads it. It is loaded
+          # alphabetically after tekton.auto.tfvars, so its values take
+          # precedence over the per-key TF_VARS above.
+          echo "Decoding tfvars file from base64 -> zz-override.auto.tfvars"
+          echo "${TF_VARS_FILE}" | base64 -d > ./zz-override.auto.tfvars
+          echo "Contents:"
+          cat ./zz-override.auto.tfvars
+        fi
+
+    - name: terraform-init
+      args:
+        - $(params.BACKEND_CONFIG[*])
+      env:
+        - name: INIT_EXTRA_ARGS
+          value: $(params.INIT_EXTRA_ARGS)
+        - name: VAULT_ADDR
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-addr)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-namespace)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_ROLE_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleId)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_SECRET_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleSecret)
+              name: $(params.vault-secret-name)
+              optional: true
+      envFrom:
+        - secretRef:
+            name: $(params.credentials-secret-name)
+            optional: true
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        # Positional params ($@) are the BACKEND_CONFIG key+-value pairs.
+        # Translate each into a -backend-config=key=value flag, appended to
+        # the positional list, then shift off the original raw pairs. Using
+        # positional params keeps each flag a single word, so values with
+        # spaces/quotes can't be re-split or globbed.
+        orig_count=$#
+        for param in "$@"; do
+          bc=$(echo "$param" | sed -e "s/+-/=/")
+          set -- "$@" "-backend-config=${bc}"
+        done
+        i=0
+        while [ "$i" -lt "$orig_count" ]; do
+          shift
+          i=$((i + 1))
+        done
+
+        echo "=========================================="
+        echo "TERRAFORM INIT"
+        echo "=========================================="
+        # INIT_EXTRA_ARGS is intentionally word-split; "$@" holds the
+        # -backend-config flags.
+        # shellcheck disable=SC2086
+        terraform init -input=false ${INIT_EXTRA_ARGS} "$@"
+
+    - name: terraform-action
+      env:
+        - name: ACTION
+          value: $(params.ACTION)
+        - name: AUTO_APPROVE
+          value: $(params.AUTO_APPROVE)
+        - name: PLAN_EXTRA_ARGS
+          value: $(params.PLAN_EXTRA_ARGS)
+        - name: VAULT_ADDR
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-addr)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-namespace)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_ROLE_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleId)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_SECRET_ID
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-approleSecret)
+              name: $(params.vault-secret-name)
+              optional: true
+      envFrom:
+        - secretRef:
+            name: $(params.credentials-secret-name)
+            optional: true
+      script: |
+        #!/usr/bin/env sh
+        set -eu
+
+        APPROVE_FLAG=""
+        if [ "${AUTO_APPROVE}" = "true" ]; then
+          APPROVE_FLAG="-auto-approve"
+        fi
+
+        echo "=========================================="
+        echo "TERRAFORM ${ACTION}"
+        echo "=========================================="
+
+        case "${ACTION}" in
+          plan)
+            # shellcheck disable=SC2086
+            terraform plan -input=false ${PLAN_EXTRA_ARGS} -out=tfplan
+            ;;
+          apply)
+            # shellcheck disable=SC2086
+            terraform apply -input=false ${APPROVE_FLAG} ${PLAN_EXTRA_ARGS}
+            ;;
+          destroy)
+            # shellcheck disable=SC2086
+            terraform destroy -input=false ${APPROVE_FLAG} ${PLAN_EXTRA_ARGS}
+            ;;
+          *)
+            echo "ERROR: unsupported ACTION '${ACTION}' (expected plan, apply or destroy)" >&2
+            exit 1
+            ;;
+        esac
+
+        printf '%s' "${ACTION}" > "$(results.action-performed.path)"
+        echo "=========================================="
+        echo "terraform ${ACTION} completed successfully"
+        echo "=========================================="
