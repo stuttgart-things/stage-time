@@ -15,29 +15,34 @@ repos:
       - id: check-symlinks
       #- id: check-yaml
       - id: detect-private-key
-  - repo: https://github.com/hadolint/hadolint
-    rev: "v2.12.0"
+  # hadolint via the bundled static binary on PATH (provided by the dagger
+  # linting module, v0.119.0+). The upstream hadolint/hadolint hook ids
+  # (`hadolint`, `hadolint-docker`) are Docker-based and don't work inside the
+  # Dagger container — so wire a local/system hook against the binary instead.
+  - repo: local
     hooks:
-      - id: hadolint-docker
+      - id: hadolint
+        name: Lint Dockerfiles with hadolint
+        entry: hadolint
+        language: system
+        types: [dockerfile]
         args:
           - --ignore
-          - DL4006
+          - DL4006   # set -o pipefail before RUN with a pipe
           - --ignore
-          - DL3015
+          - DL3015   # avoid additional packages (--no-install-recommends)
           - --ignore
-          - DL4006   # Use absolute WORKDIR
+          - DL3018   # pin versions in apk add
           - --ignore
-          - DL3015   # Use ADD instead of COPY
+          - DL4001   # either wget or curl, not both
           - --ignore
-          - DL3018   # Pin versions in apk add
+          - DL3042   # avoid pip cache dir
           - --ignore
-          - DL4001   # Either use Wget or Curl but not both
+          - DL3013   # pin versions in pip
           - --ignore
-          - DL3042   # Avoid pip cache dir
+          - DL3002   # last USER should not be root
           - --ignore
-          - DL3013   # Pin versions in pip
-          - --ignore
-          - DL3002   # Last USER should not be root
+          - SC1091   # can't follow runtime-sourced files (e.g. cargo env)
   - repo: https://github.com/sirosen/check-jsonschema
     rev: 0.30.0
     hooks:
