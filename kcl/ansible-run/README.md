@@ -1,5 +1,18 @@
 # ANSIBLE-RUN
 
+> **What this is:** a **client-side generator for the `AnsibleRun` XR**
+> (`resources.stuttgart-things.com/v1alpha1`) — it renders the *request* object
+> you `kubectl apply`. It is **not** the Composition renderer; that is
+> [`kcl/ansible`](../ansible) (`kcl-tekton-pr`), which turns an `AnsibleRun`
+> spec into a Tekton `PipelineRun`.
+>
+> The **canonical schema** is the XRD in
+> [`stuttgart-things/crossplane-configurations`](https://github.com/stuttgart-things/crossplane-configurations)
+> (`cicd/ansible-run/apis/definition.yaml`). The fields this generator exposes
+> are a **subset** of it — for the full spec and authoritative examples, see
+> that XRD and `cicd/ansible-run/examples/xr*.yaml`. Restructure options are
+> tracked in [#45](https://github.com/stuttgart-things/stage-time/issues/45).
+
 ## RENDER CLAIM (KIND XPLANE SETUP)
 
 ```bash

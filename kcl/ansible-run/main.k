@@ -3,6 +3,17 @@ AnsibleRun Main Configuration
 Supports both Composition format and flat format with -D overrides
 """
 
+# kcl/ansible-run — CLIENT-SIDE GENERATOR for the AnsibleRun XR
+# (resources.stuttgart-things.com/v1alpha1).
+#
+# This renders the *request* object you `kubectl apply`. It is NOT the
+# Composition renderer — that is kcl/ansible (kcl-tekton-pr), which turns an
+# AnsibleRun spec into a Tekton PipelineRun.
+#
+# The canonical schema is the XRD in stuttgart-things/crossplane-configurations
+# (cicd/ansible-run/apis/definition.yaml). The fields below are a SUBSET; for
+# the full spec and authoritative examples see that XRD and
+# cicd/ansible-run/examples/xr*.yaml.  See stage-time#45.
 import .schema
 
 # --- Read parameters (supports both Composition format and flat format) ---
