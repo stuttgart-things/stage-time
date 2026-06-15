@@ -36,6 +36,7 @@ _ansibleExtraRoles = _flat_params?.ansibleExtraRoles or option("ansibleExtraRole
 _ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVarsInventory") or []
 _ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 _ansibleCredentialsSecretName = _flat_params?.ansibleCredentialsSecretName or _env?.ansibleCredentialsSecretName or option("ansibleCredentialsSecretName") or "ansible-credentials"
+
 # Previously these only resolved from `-D` options via values.k, so setting
 # them in an XR spec (composition mode) was silently ignored. Extract them
 # here so `oxr.spec.<field>` is honoured, same precedence as the fields above.
