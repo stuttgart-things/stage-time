@@ -1,0 +1,95 @@
+---
+name: Docker Build & Push (sthings-ansible)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - images/ansible/**
+      - .github/workflows/docker-build.yaml
+  push:
+    branches: [main]
+    paths:
+      - images/ansible/**
+      - .github/workflows/docker-build.yaml
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docker-build:
+    name: docker-build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set image name
+        id: image-name
+        run: echo "name=stuttgart-things/sthings-ansible" >> "$GITHUB_OUTPUT"
+
+      # Build images/ansible/Dockerfile and push to ttl.sh (ephemeral, no auth)
+      # as a build-validation step. The Dockerfile is self-contained (no COPY),
+      # so the build context is the image dir itself. Publishing the released
+      # image to ghcr.io is handled separately (see #34 follow-up).
+      - name: Dagger Build and Push (ttl.sh)
+        id: build-image
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/docker@v0.90.1
+          call: >-
+            build-and-push
+            --source images/ansible
+            --dockerfile Dockerfile
+            --repository-name ${{ steps.image-name.outputs.name }}
+            --registry-url ttl.sh
+            --tag "${{ github.sha }}"
+            --progress plain
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Scan image with Trivy
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/trivy@v0.90.1
+          call: scan-image --image-ref="ttl.sh/${{ steps.image-name.outputs.name }}:${{ github.sha }}" --severity="HIGH,CRITICAL" --trivy-version="0.64.1" export --path=/tmp/trivy-scan-report.json
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      - name: Upload scan report
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-scan-report
+          path: /tmp/trivy-scan-report.json
+          retention-days: 30
+
+      - name: Check for vulnerabilities
+        run: |
+          if command -v jq &> /dev/null; then
+            VULN_COUNT=$(jq '[.Results[]?.Vulnerabilities[]?] | length' /tmp/trivy-scan-report.json 2>/dev/null || echo "0")
+            echo "Found $VULN_COUNT HIGH/CRITICAL vulnerabilities"
+            if [ "$VULN_COUNT" -gt 0 ]; then
+              echo "::warning::Image contains $VULN_COUNT HIGH/CRITICAL vulnerabilities"
+              jq -r '.Results[]? | select(.Vulnerabilities) | "\(.Target): \(.Vulnerabilities | length) vulnerabilities"' \
+                /tmp/trivy-scan-report.json
+            else
+              echo "✅ No HIGH/CRITICAL vulnerabilities found!"
+            fi
+          fi
+
+      - name: Build Summary
+        run: |
+          echo "## 🎉 sthings-ansible Image Build Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Image:** \`ttl.sh/${{ steps.image-name.outputs.name }}:${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Pull command:**" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`bash" >> "$GITHUB_STEP_SUMMARY"
+          echo "docker pull ttl.sh/${{ steps.image-name.outputs.name }}:${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "⏰ **Note:** ttl.sh images expire after 1 hour" >> "$GITHUB_STEP_SUMMARY"
