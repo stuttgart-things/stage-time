@@ -167,7 +167,7 @@ spec:
           # deliberately. The stage-time self-reference above stays on `main`
           # so local task edits still auto-propagate.
           - name: revision
-            value: 7ea2968e224633b4967d60217b33bb4d38fa53d9
+            value: 7ea2968e224633b4967d60217b33bb4d38fa53d9 # pragma: allowlist secret (git commit SHA, not a secret)
           - name: pathInRepo
             value: task/git-clone/0.10/git-clone.yaml
       workspaces:
