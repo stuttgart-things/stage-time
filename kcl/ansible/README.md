@@ -15,7 +15,7 @@ kcl mod push oci://ghcr.io/stuttgart-things/kcl-tekton-pr
 <details><summary>EXAMPLE RENDERING</summary>
 
 ```bash
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.6.0 \
   -D storageSize="5000Mi" \
   -D storageAccessModes="ReadWriteOnce" \
   -D ansiblePlaybooks='["sthings.baseos.prepare_env", "sthings.baseos.setup", "sthings.apps.deploy"]' \
@@ -28,7 +28,7 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
 
 ```bash
 # RENDER + APPLY
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.3.0 \
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.6.0 \
 -D pipelineRunName="run-ansible-test-6" \
 -D namespace="tekton-ci" \
 -D storageSize="20Mi" \
@@ -103,7 +103,7 @@ kcl run ./main.k \
 
 ```bash
 # RENDER (# or use main.k (or leave out reference) instead of the oci module)
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.3 -D params='{
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.6.0 -D params='{
   "oxr": {
     "spec": {
       "pipelineRunName": "run-ansible-test-6",
@@ -155,7 +155,7 @@ kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.3 -D params='{
 
 ```bash
 # MINIMAL
-kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.4.2 -D params='{
+kcl run oci://ghcr.io/stuttgart-things/kcl-tekton-pr --tag 0.6.0 -D params='{
   "oxr": {
     "spec": {
       "pipelineRunName": "run-ansible-test1",
