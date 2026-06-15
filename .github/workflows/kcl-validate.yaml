@@ -22,6 +22,8 @@ jobs:
           - kcl/ansible
           - kcl/ansible-run
           - kcl/buildah
+          - kcl/packer
+          - kcl/packer-run
     # NOTE: requires call-kcl-validate.yaml to be merged into
     # github-workflow-templates' main branch first.
     uses: stuttgart-things/github-workflow-templates/.github/workflows/call-kcl-validate.yaml@main
