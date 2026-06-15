@@ -3,7 +3,13 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        # KCL files are formatted by `kcl fmt` (call-kcl-validate.yaml), which
+        # owns their whitespace/trailing-newline style. kcl fmt emits a trailing
+        # blank line that end-of-file-fixer would otherwise strip back, so the
+        # two hooks fight. Let kcl fmt be authoritative for *.k.
+        exclude: ^kcl/.*\.k$
       - id: end-of-file-fixer
+        exclude: ^kcl/.*\.k$
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-symlinks
@@ -49,4 +55,9 @@ repos:
         files: .*  # all files
         args:
           - "--exclude-files"
-          - "kcl/ansible/README.md"
+          # README carries example secrets. *.k files are formatted by `kcl fmt`,
+          # which relocates a trailing `pragma: allowlist secret` onto its own
+          # line above the value, where detect-secrets no longer honors it — so
+          # in-line allowlisting can't survive in KCL. kcl fmt is authoritative
+          # for *.k (matching the trailing-whitespace/end-of-file-fixer excludes).
+          - "(kcl/ansible/README\\.md|\\.k$)"

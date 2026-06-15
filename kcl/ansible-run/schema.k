@@ -18,11 +18,9 @@ schema AnsibleRunSpec:
     crossplaneObjectName?: str
     crossplaneNamespace?: str
     crossplaneProviderConfig?: str
-
     # PipelineRun Configuration
     pipelineRunName?: str
     namespace?: str
-
     # Ansible Configuration
     ansibleCredentialsSecretName?: str
     ansiblePlaybooks?: [str]
@@ -38,3 +36,4 @@ schema AnsibleRun:
     kind: str = "AnsibleRun"
     metadata: Metadata
     spec: AnsibleRunSpec
+

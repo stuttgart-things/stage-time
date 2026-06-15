@@ -27,4 +27,4 @@ jobs:
     uses: stuttgart-things/github-workflow-templates/.github/workflows/call-kcl-validate.yaml@main
     with:
       module-dir: ${{ matrix.module-dir }}
-    secrets: inherit
+    secrets: inherit # pragma: allowlist secret

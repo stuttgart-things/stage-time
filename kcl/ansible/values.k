@@ -1,5 +1,4 @@
 # values.k
-
 import .schema
 
 # Environment-specific overrides with defaults
@@ -27,13 +26,9 @@ _varsFile = option("varsFile") or ""
 _createInventory = option("createInventory") or "true"
 
 # Inline validation for immediate feedback
-assert _ansibleWorkingImage.startswith("ghcr.io/") or \
-       _ansibleWorkingImage.startswith("docker.io/") or \
-       _ansibleWorkingImage.startswith("quay.io/"), \
-       "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
+assert _ansibleWorkingImage.startswith("ghcr.io/") or _ansibleWorkingImage.startswith("docker.io/") or _ansibleWorkingImage.startswith("quay.io/"), "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
 
-assert _gitRepoUrl.startswith("https://github.com/"), \
-       "gitRepoUrl must be a valid GitHub HTTPS URL"
+assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a valid GitHub HTTPS URL"
 
 _override_params = {
     ansibleWorkingImage = _ansibleWorkingImage
@@ -54,6 +49,5 @@ _override_params = {
     varsFile = _varsFile
     createInventory = _createInventory
 }
-
 # Still validate against schema for completeness
 #_validated = schema.PipelineOverrides _override_params
