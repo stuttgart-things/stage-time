@@ -47,3 +47,4 @@ schema PackerBuild:
     kind: str = "PackerBuild"
     metadata: Metadata
     spec: PackerBuildSpec
+
