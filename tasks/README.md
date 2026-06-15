@@ -152,3 +152,63 @@ EOF
 ```
 
 </details>
+
+<details><summary>EXECUTE PACKER</summary>
+
+Runs `packer init` followed by `validate` or `build` against the HCL
+template(s) in the `source` workspace, to build VM templates / golden images
+(vSphere / Proxmox / qemu). Per-key variables (`PKR_VARS`) and a base64 pkrvars
+file (`PKR_VARS_FILE`) are written as `*.auto.pkrvars.hcl`. Builder credentials
+are injected from an optional secret (`credentials-secret-name`, default
+`packer-credentials`) whose keys become environment variables (e.g.
+`PKR_VAR_vsphere_password`, `PROXMOX_TOKEN`, ...).
+
+The common plugins (`vsphere`, `proxmox`, `qemu`) are baked into the
+`sthings-packer` image so `packer init` resolves them offline; a template that
+pins a newer plugin pulls it at run time. Private CA certificates can be trusted
+per run (not baked into the image) by binding the optional `ca-certs` workspace;
+any `*.crt` / `*.pem` files there are appended to the system trust store via
+`SSL_CERT_FILE`.
+
+When the template uses the manifest post-processor (`packer-manifest.json`), the
+last build's `artifact_id` is surfaced as the `artifact-id` result.
+
+```bash
+kubectl create secret generic packer-credentials \
+--from-literal=PKR_VAR_vsphere_password=<PASSWORD> \
+-n tekton-ci
+```
+
+```bash
+kubectl apply -f - <<EOF
+---
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: execute-packer-test
+  namespace: tekton-ci
+spec:
+  taskRef:
+    name: execute-packer
+  params:
+    - name: ACTION
+      value: "build"
+    - name: SUB_DIRECTORY
+      value: "packer"
+    - name: TEMPLATE
+      value: "ubuntu24.pkr.hcl"
+    - name: PKR_VARS
+      value:
+        - "vm_name+-'ubuntu24-golden'"
+        - "vsphere_datacenter+-'dc-01'"
+  workspaces:
+    - name: source
+      persistentVolumeClaim:
+        claimName: packer-source-pvc
+    - name: ca-certs       # optional - private CA trust, per run
+      secret:
+        secretName: private-ca
+EOF
+```
+
+</details>
