@@ -47,6 +47,13 @@ _ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks")
 _ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 _ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVarsInventory") or []
 _ansibleExtraCollections = _flat_params?.ansibleExtraCollections or option("ansibleExtraCollections") or []
+# Optional static inventory / vars file (base64 strings); empty means unset
+_inventory = _flat_params?.inventory or option("inventory") or ""
+_varsFile = _flat_params?.varsFile or option("varsFile") or ""
+
+# Runtime
+_userHome = _flat_params?.userHome or option("userHome") or "/home/nonroot"
+_vaultSecretName = _flat_params?.vaultSecretName or option("vaultSecretName") or "vault"
 
 # --- Generate AnsibleRun Resource ---
 _ansibleRun = schema.AnsibleRun {
@@ -66,6 +73,13 @@ _ansibleRun = schema.AnsibleRun {
         ansibleVarsFile = _ansibleVarsFile
         ansibleVarsInventory = _ansibleVarsInventory
         ansibleExtraCollections = _ansibleExtraCollections
+        userHome = _userHome
+        vaultSecretName = _vaultSecretName
+        # Only emit when set, so empty defaults don't appear in the XR
+        if _inventory:
+            inventory = _inventory
+        if _varsFile:
+            varsFile = _varsFile
     }
 }
 

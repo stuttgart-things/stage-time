@@ -27,6 +27,11 @@ schema AnsibleRunSpec:
     ansibleVarsFile?: [str]
     ansibleVarsInventory?: [str]
     ansibleExtraCollections?: [str]
+    inventory?: str
+    varsFile?: str
+    # Runtime
+    userHome?: str
+    vaultSecretName?: str
 
 schema AnsibleRun:
     """
