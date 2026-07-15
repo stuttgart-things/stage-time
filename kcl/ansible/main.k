@@ -40,6 +40,16 @@ _gitPath = _flat_params?.gitPath or _env?.gitPath or option("gitPath") or "pipel
 # no longer drags the pipeline definition with it.
 _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or option("pipelineRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
 _pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.7.0"
+
+# SOPS decrypt-after-git-clone (execute-ansible-playbooks pipeline only). Off by
+# default. When "true", the sops params are passed AND the sopsKeys workspace is
+# bound to the age-key secret; when false, nothing sops-related is emitted so the
+# from-collections pipeline (no clone / no sopsKeys workspace) is unaffected.
+_decryptSops = _flat_params?.decryptSops or _env?.decryptSops or option("decryptSops") or "false"
+_sopsFiles = _flat_params?.sopsFiles or option("sopsFiles") or ""
+_sopsFilePattern = _flat_params?.sopsFilePattern or option("sopsFilePattern") or "*.sops.yaml"
+_sopsAgeKeyFile = _flat_params?.sopsAgeKeyFile or _env?.sopsAgeKeyFile or option("sopsAgeKeyFile") or "age.agekey"
+_sopsAgeKeySecretName = _flat_params?.sopsAgeKeySecretName or _env?.sopsAgeKeySecretName or option("sopsAgeKeySecretName") or "sops-age-key"
 _ansibleWorkingImage = _flat_params?.ansibleWorkingImage or _env?.ansibleWorkingImage or option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
 _ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks") or ["sthings.baseos.setup"]
 _ansibleExtraCollections = _flat_params?.ansibleExtraCollections or _env?.ansibleExtraCollections or option("ansibleExtraCollections") or []
@@ -74,6 +84,11 @@ assert len(_gitRevision) > 0, "gitRevision cannot be empty"
 # Storage validation (moved from the former vars.k schema.StorageConfig).
 assert _storageSize.endswith("Mi") or _storageSize.endswith("Gi"), "storageSize must end with 'Mi' or 'Gi'"
 assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"], "storageAccessModes must be ReadWriteOnce, ReadWriteMany, or ReadOnlyMany"
+
+# SOPS decryption only exists on the clone pipeline (it decrypts the cloned repo
+# and needs the sopsKeys workspace, which the from-collections pipeline does not
+# declare). Fail fast instead of producing a PipelineRun that Tekton rejects.
+assert _decryptSops != "true" or _gitPath == "pipelines/execute-ansible-playbooks.yaml", "decryptSops=true requires gitPath=pipelines/execute-ansible-playbooks.yaml (the clone pipeline); the from-collections pipeline has no git clone and no sopsKeys workspace"
 
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
@@ -139,6 +154,13 @@ _pipeline_params_override = {
     validateInventory = _validateInventory
     gitRepoUrl = _gitRepoUrl
     gitRevision = _gitRevision
+    # Only emit sops params when enabled — keeps the from-collections pipeline
+    # (which doesn't declare them) unaffected; the clone pipeline defaults them.
+    if _decryptSops == "true":
+        decryptSops = _decryptSops
+        sopsFiles = _sopsFiles
+        sopsFilePattern = _sopsFilePattern
+        sopsAgeKeyFile = _sopsAgeKeyFile
 }
 
 # --- Generate the PipelineRun ---
@@ -155,7 +177,12 @@ _pipelineRun = tekton.PipelineRun {
         params = [{name = k, value = v} for k, v in _pipeline_params_override]
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
-        workspaces = [_workspace_config_override]
+        # Bind the sopsKeys workspace (age-key secret) only when decryption is on;
+        # binding a workspace the target pipeline doesn't declare would be rejected.
+        workspaces = [_workspace_config_override] + ([{
+            name = "sopsKeys"
+            secret = {secretName = _sopsAgeKeySecretName}
+        }] if _decryptSops == "true" else [])
     }
 }
 
