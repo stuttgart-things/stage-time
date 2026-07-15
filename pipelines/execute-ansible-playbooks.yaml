@@ -8,6 +8,11 @@ spec:
     - name: shared-workspace
     - name: sshCredentials
       optional: true
+    - name: sopsKeys
+      optional: true
+      description: >-
+        Optional workspace holding SOPS decryption keys (age key file and/or
+        PGP private key). Bound only when decryptSops is enabled.
   params:
     - name: ansibleExtraRoles
       type: array
@@ -98,10 +103,37 @@ spec:
       type: string
       default: "ANSIBLE_PASSWORD"
       description: key for ansible password in the secret
+    # -------------------------------
+    # SOPS decryption (runs after the git clone, before ansible)
+    # -------------------------------
+    - name: decryptSops
+      type: string
+      default: "false"
+      description: >-
+        When "true", decrypt SOPS-encrypted files from the cloned repo before
+        running ansible. Requires the sopsKeys workspace to be bound.
+    - name: sopsFiles
+      type: string
+      default: ""
+      description: >-
+        Whitespace-separated files to decrypt, relative to the shared workspace
+        root (e.g. "<gitWorkspaceSubdirectory>/secrets.sops.yaml"). Empty =>
+        every file matching sopsFilePattern.
+    - name: sopsFilePattern
+      type: string
+      default: "*.sops.yaml"
+      description: find(1) -name pattern used when sopsFiles is empty.
+    - name: sopsAgeKeyFile
+      type: string
+      default: "age.agekey"
+      description: >-
+        Name of the age key file inside the sopsKeys workspace (the
+        sops-secrets-operator project key secret exposes it as "age.agekey").
   tasks:
     - name: execute-ansible
       runAfter:
         - fetch-repository
+        - decrypt-sops
       taskRef:
         resolver: git
         params:
@@ -184,3 +216,41 @@ spec:
           value: $(params.gitWorkspaceSubdirectory)
         - name: url
           value: $(params.gitRepoUrl)
+    - name: decrypt-sops
+      runAfter:
+        - fetch-repository
+      when:
+        - input: $(params.decryptSops)
+          operator: in
+          values: ["true"]
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/decrypt-sops.yaml
+      workspaces:
+        # Decrypt in place: read the cloned encrypted files from the shared
+        # workspace and write the plaintext back to the same paths so the
+        # ansible task (workingDir = <shared>/<gitWorkspaceSubdirectory>) reads
+        # the decrypted files.
+        - name: input
+          workspace: shared-workspace
+        - name: output
+          workspace: shared-workspace
+        - name: sops-keys
+          workspace: sopsKeys
+      params:
+        - name: files
+          value: $(params.sopsFiles)
+        - name: filePattern
+          value: $(params.sopsFilePattern)
+        - name: outputSubdirectory
+          value: ""
+        - name: ageKeyFile
+          value: $(params.sopsAgeKeyFile)
+        - name: verbose
+          value: "true"

@@ -140,7 +140,15 @@ spec:
           dest="${OUTPUT_DIR}/${f}"
           mkdir -p "$(dirname "${dest}")"
           echo "Decrypting ${f} -> ${dest}"
-          sops --decrypt "${f}" > "${dest}"
+          # Decrypt to a temp file first, then move it into place. When the
+          # input and output workspaces are the same PVC (in-place decryption,
+          # e.g. decrypting cloned files where ansible later reads them), a
+          # direct `sops --decrypt ${f} > ${dest}` truncates ${dest} — which IS
+          # ${f} — to zero bytes before sops reads it, yielding "sops metadata
+          # not found". The temp file avoids clobbering the source.
+          tmp="$(mktemp)"
+          sops --decrypt "${f}" > "${tmp}"
+          mv "${tmp}" "${dest}"
         done
 
         echo "Decrypted files written to ${OUTPUT_DIR}:"
