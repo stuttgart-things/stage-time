@@ -26,9 +26,20 @@ _storageAccessModes = _flat_params?.storageAccessModes or option("storageAccessM
 _storageClass = _flat_params?.storageClass or _env?.storageClass or option("storageClass") or "openebs-hostpath"
 _namespace = _flat_params?.namespace or _env?.namespace or option("namespace") or "tekton-ci"
 _pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or None
+
+# Ansible CONTENT source (what fetch-repository clones for the execute-ansible-
+# playbooks pipeline). This is the user's playbook repo/revision.
 _gitRepoUrl = _flat_params?.gitRepoUrl or _env?.gitRepoUrl or option("gitRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
 _gitRevision = _flat_params?.gitRevision or _env?.gitRevision or option("gitRevision") or "main"
 _gitPath = _flat_params?.gitPath or _env?.gitPath or option("gitPath") or "pipelines/execute-ansible-playbooks-from-collections.yaml"
+
+# Pipeline DEFINITION source for the PipelineRun's `pipelineRef` git resolver —
+# i.e. where the Tekton Pipeline YAML at `_gitPath` lives. Pinned to a stage-time
+# release TAG (not `main`) for reproducibility/supply-chain safety; kept separate
+# from the content source above so pointing gitRepoUrl at an external playbook repo
+# no longer drags the pipeline definition with it.
+_pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or option("pipelineRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
+_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.7.0"
 _ansibleWorkingImage = _flat_params?.ansibleWorkingImage or _env?.ansibleWorkingImage or option("ansibleWorkingImage") or "ghcr.io/stuttgart-things/sthings-ansible:11.11.0"
 _ansiblePlaybooks = _flat_params?.ansiblePlaybooks or option("ansiblePlaybooks") or ["sthings.baseos.setup"]
 _ansibleExtraCollections = _flat_params?.ansibleExtraCollections or _env?.ansibleExtraCollections or option("ansibleExtraCollections") or []
@@ -83,8 +94,8 @@ _suffix = crypto.md5(_timestamp)[:8:]
 
 # --- Override configurations with extracted params ---
 _git_config_override = {
-    url = _gitRepoUrl
-    revision = _gitRevision
+    url = _pipelineRepoUrl
+    revision = _pipelineRevision
     pathInRepo = _gitPath
 }
 
