@@ -198,6 +198,12 @@ _crossplaneObject = {
         }
     }
     spec = {
+        # A PipelineRun is one-shot and Tekton rejects any spec update once it
+        # completes. The default ["*"] claims Update, so provider-kubernetes'
+        # observe dry-run SSA gets denied by the webhook, the observe errors and
+        # the finalizer is never released — deleting the XR after a successful
+        # run strands the Object forever. Create it, watch it, never touch it.
+        managementPolicies = ["Observe", "Create"]
         forProvider = {
             manifest = _pipelineRun
         }
