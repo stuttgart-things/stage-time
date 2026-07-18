@@ -360,12 +360,33 @@ spec:
             packer validate ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}"
             ;;
           build)
-            # Stream packer output live (tee) while keeping a copy to parse the
-            # produced template name from. PIPESTATUS preserves packer's exit
-            # code so a failed build is not masked by tee's success.
+            # -machine-readable gives a stable, parseable event stream on
+            # stdout (`<ts>,<target>,artifact,<idx>,id,<name>`). The previous
+            # approach parsed the same events out of packer's *debug log*,
+            # which packer only writes when PACKER_LOG is set - so with the
+            # default PACKER_LOG="" no name was ever found and every
+            # successful build failed the task.
+            #
+            # -machine-readable suppresses the human-readable output, so the
+            # awk below re-renders the `ui` events live to keep the TaskRun
+            # log readable. stderr is deliberately NOT merged into the pipe:
+            # it carries packer's own errors and any PACKER_LOG debug output,
+            # which would otherwise be swallowed by the renderer.
+            #
+            # PIPESTATUS[0] preserves packer's exit code so a failed build is
+            # not masked by the success of tee/awk.
             set +e
             # shellcheck disable=SC2086
-            packer build -color=false ${FORCE_FLAG} ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}" 2>&1 | tee /tmp/packer-build.log
+            packer build -machine-readable ${FORCE_FLAG} ${ONLY_FLAG} ${BUILD_EXTRA_ARGS} "${TEMPLATE}" \
+              | tee /tmp/packer-build.log \
+              | awk -F, '$3 == "ui" {
+                  line = $5
+                  for (i = 6; i <= NF; i++) line = line "," $i
+                  gsub(/%!\(PACKER_COMMA\)/, ",", line)
+                  gsub(/\\n/, "\n", line)
+                  gsub(/\\r/, "", line)
+                  print line
+                }'
             rc=${PIPESTATUS[0]}
             set -e
             if [ "${rc}" -ne 0 ]; then
@@ -373,12 +394,18 @@ spec:
               exit "${rc}"
             fi
 
-            # Parse the built template name from packer's artifact log line
-            # (e.g. `... artifact []string{"0", "id", "<template>"}`). No
+            # Pull the artifact id out of the machine-readable stream. No
             # fabricated fallback: if no artifact was produced (no-op build or
-            # changed log format) we must FAIL, otherwise downstream
+            # changed event format) we must FAIL, otherwise downstream
             # promote/rename steps act on a template that does not exist.
-            TEMPLATE_NAME=$(sed -n 's/.*"0", "id", "\([^"]*\)".*/\1/p' /tmp/packer-build.log | tail -1)
+            # tail -1 keeps the last artifact when -only matched several
+            # sources, matching the previous behaviour.
+            TEMPLATE_NAME=$(awk -F, '$3 == "artifact" && $5 == "id" {
+                v = $6
+                for (i = 7; i <= NF; i++) v = v "," $i
+                gsub(/%!\(PACKER_COMMA\)/, ",", v)
+                print v
+              }' /tmp/packer-build.log | tail -1)
             if [ -z "${TEMPLATE_NAME}" ]; then
               echo "ERROR: packer build finished but no template name could be extracted from the log." >&2
               echo "ERROR: this means no artifact was produced (no-op build) or the log format changed." >&2

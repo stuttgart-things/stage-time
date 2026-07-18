@@ -39,7 +39,7 @@ _gitPath = _flat_params?.gitPath or _env?.gitPath or option("gitPath") or "pipel
 # from the content source above so pointing gitRepoUrl at an external playbook repo
 # no longer drags the pipeline definition with it.
 _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or option("pipelineRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
-_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.7.0"
+_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.8.0"
 
 # SOPS decrypt-after-git-clone (execute-ansible-playbooks pipeline only). Off by
 # default. When "true", the sops params are passed AND the sopsKeys workspace is

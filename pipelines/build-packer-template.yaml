@@ -120,7 +120,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.7.0
+            value: v0.8.0
           - name: pathInRepo
             value: tasks/execute-packer.yaml
       workspaces:
