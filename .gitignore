@@ -37,3 +37,8 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+# Local KCL OCI pull cache — `kcl mod push`/`add` unpacks fetched modules
+# next to the module it ran in (e.g. kcl/ansible/oci/ghcr.io/...). Build
+# artifact, never source.
+kcl/**/oci/
