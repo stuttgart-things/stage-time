@@ -8,6 +8,12 @@ spec:
     - name: shared-workspace
     - name: sshCredentials
       optional: true
+    # Credentials for cloning the template repo over HTTPS (the default
+    # gitRepoUrl is a private repo, and an ssh-directory cannot authenticate
+    # an https:// remote). Expects a secret with .gitconfig / .git-credentials
+    # as produced by templates/git-basicauth-secret.yaml.
+    - name: basicAuth
+      optional: true
     - name: caCerts
       optional: true
   params:
@@ -78,7 +84,11 @@ spec:
     - name: gitWorkspaceSubdirectory
       type: string
       default: ""
-      description: subdirectory on workspace
+      description: >-
+        path INSIDE the template repo holding the *.pkr.hcl (e.g.
+        packer/builds/ubuntu24-labul-vsphere-base-os). Empty => repo root.
+        This is not a workspace-placement path; the repo is always cloned to
+        the workspace root.
   results:
     - name: template-name
       description: name of the template/artifact produced by the build
@@ -102,13 +112,21 @@ spec:
           workspace: shared-workspace
         - name: ssh-directory
           workspace: sshCredentials
+        - name: basic-auth
+          workspace: basicAuth
       params:
         - name: deleteExisting
           value: 'true'
         - name: revision
           value: $(params.gitRevision)
-        - name: subdirectory
-          value: $(params.gitWorkspaceSubdirectory)
+        # NOTE: gitWorkspaceSubdirectory is deliberately NOT passed as
+        # git-clone's `subdirectory`. It is a REPO-RELATIVE path (where the
+        # *.pkr.hcl live inside the template repo, e.g.
+        # packer/builds/<os>-<lab>-<hypervisor>-<provisioning>) and is applied
+        # by execute-packer as SUB_DIRECTORY. Passing it here too nested the
+        # clone under the same path, so the packer working dir landed on the
+        # repo ROOT and every real build failed with
+        # "Could not find any config file in .".
         - name: url
           value: $(params.gitRepoUrl)
     - name: execute-packer

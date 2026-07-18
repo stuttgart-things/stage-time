@@ -221,64 +221,14 @@ spec:
           cat ./zz-override.auto.pkrvars.hcl
         fi
 
-    - name: packer-init
-      env:
-        - name: RUN_INIT
-          value: $(params.RUN_INIT)
-        - name: TEMPLATE
-          value: $(params.TEMPLATE)
-        - name: INIT_EXTRA_ARGS
-          value: $(params.INIT_EXTRA_ARGS)
-        - name: VAULT_ADDR
-          valueFrom:
-            secretKeyRef:
-              key: $(params.vault-secret-key-addr)
-              name: $(params.vault-secret-name)
-              optional: true
-        - name: VAULT_NAMESPACE
-          valueFrom:
-            secretKeyRef:
-              key: $(params.vault-secret-key-namespace)
-              name: $(params.vault-secret-name)
-              optional: true
-        - name: VAULT_ROLE_ID
-          valueFrom:
-            secretKeyRef:
-              key: $(params.vault-secret-key-approleId)
-              name: $(params.vault-secret-name)
-              optional: true
-        - name: VAULT_SECRET_ID
-          valueFrom:
-            secretKeyRef:
-              key: $(params.vault-secret-key-approleSecret)
-              name: $(params.vault-secret-name)
-              optional: true
-        - name: VAULT_TOKEN
-          valueFrom:
-            secretKeyRef:
-              key: $(params.vault-secret-key-token)
-              name: $(params.vault-secret-name)
-              optional: true
-      envFrom:
-        - secretRef:
-            name: $(params.credentials-secret-name)
-            optional: true
-      script: |
-        #!/usr/bin/env sh
-        set -eu
-
-        if [ "${RUN_INIT}" != "true" ]; then
-          echo "Skipped packer init (RUN_INIT=${RUN_INIT})"
-          exit 0
-        fi
-
-        echo "=========================================="
-        echo "PACKER INIT"
-        echo "=========================================="
-        # INIT_EXTRA_ARGS is intentionally word-split.
-        # shellcheck disable=SC2086
-        packer init ${INIT_EXTRA_ARGS} "${TEMPLATE}"
-
+    # init and the validate/build action MUST share one step. Tekton runs each
+    # step in its own container, and `packer init` installs plugins into
+    # $HOME/.config/packer/plugins - which is image-local, not a shared volume.
+    # As separate steps, init downloaded the plugin and the next step then died
+    # with "Missing plugins ... Did you run packer init for this project?".
+    # Pointing PACKER_PLUGIN_PATH at the workspace is NOT an alternative: it
+    # replaces (rather than extends) the search path, hiding the vsphere /
+    # proxmox / qemu plugins baked into the image.
     - name: packer-action
       env:
         - name: ACTION
@@ -289,6 +239,10 @@ spec:
           value: $(params.ONLY)
         - name: FORCE
           value: $(params.FORCE)
+        - name: RUN_INIT
+          value: $(params.RUN_INIT)
+        - name: INIT_EXTRA_ARGS
+          value: $(params.INIT_EXTRA_ARGS)
         - name: BUILD_EXTRA_ARGS
           value: $(params.BUILD_EXTRA_ARGS)
         - name: VAULT_ADDR
@@ -337,6 +291,21 @@ spec:
         printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
         printf '' > "$(results.template-name.path)"
 
+        # `packer init` first, in THIS container, so the plugins it installs
+        # are visible to the validate/build below. ACTION=init always inits -
+        # otherwise `ACTION=init RUN_INIT=false` would report success having
+        # done nothing at all.
+        if [ "${RUN_INIT}" = "true" ] || [ "${ACTION}" = "init" ]; then
+          echo "=========================================="
+          echo "PACKER INIT"
+          echo "=========================================="
+          # INIT_EXTRA_ARGS is intentionally word-split.
+          # shellcheck disable=SC2086
+          packer init ${INIT_EXTRA_ARGS} "${TEMPLATE}"
+        else
+          echo "Skipped packer init (RUN_INIT=${RUN_INIT})"
+        fi
+
         ONLY_FLAG=""
         if [ -n "${ONLY}" ]; then
           ONLY_FLAG="-only=${ONLY}"
@@ -353,7 +322,7 @@ spec:
 
         case "${ACTION}" in
           init)
-            echo "init already handled by the packer-init step - nothing to do"
+            echo "init already handled above - nothing to do"
             ;;
           validate)
             # shellcheck disable=SC2086
