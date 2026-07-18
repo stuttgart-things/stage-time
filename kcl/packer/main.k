@@ -38,6 +38,7 @@ _pipelinePath = _flat_params?.pipelinePath or _env?.pipelinePath or option("pipe
 # --- Template SOURCE repo (the .pkr.hcl templates the pipeline checks out) ---
 _gitRepoUrl = _flat_params?.gitRepoUrl or _env?.gitRepoUrl or option("gitRepoUrl") or "https://github.com/stuttgart-things/stuttgart-things.git"
 _gitRevision = _flat_params?.gitRevision or option("gitRevision") or "main"
+
 # Name of a secret holding .gitconfig / .git-credentials (see
 # templates/git-basicauth-secret.yaml). Required to clone the default
 # gitRepoUrl, which is a private repo — an https:// remote cannot be
