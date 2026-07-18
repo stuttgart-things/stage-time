@@ -81,7 +81,13 @@ jobs:
   # :latest (promotion, no rebuild).
   publish:
     name: publish (ghcr)
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # workflow_dispatch is allowed (still gated on main) so a failed publish
+    # can be retried without a dummy commit. GitHub refuses to re-run a
+    # workflow run older than a month, which left :1.15.1 unpublished after
+    # the 2026-06-15 run failed with `denied: permission_denied: write_package`.
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
