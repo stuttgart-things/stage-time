@@ -38,6 +38,11 @@ _pipelinePath = _flat_params?.pipelinePath or _env?.pipelinePath or option("pipe
 # --- Template SOURCE repo (the .pkr.hcl templates the pipeline checks out) ---
 _gitRepoUrl = _flat_params?.gitRepoUrl or _env?.gitRepoUrl or option("gitRepoUrl") or "https://github.com/stuttgart-things/stuttgart-things.git"
 _gitRevision = _flat_params?.gitRevision or option("gitRevision") or "main"
+# Name of a secret holding .gitconfig / .git-credentials (see
+# templates/git-basicauth-secret.yaml). Required to clone the default
+# gitRepoUrl, which is a private repo — an https:// remote cannot be
+# authenticated by the sshCredentials workspace. Empty = workspace unbound.
+_gitBasicAuthSecretName = _flat_params?.gitBasicAuthSecretName or _env?.gitBasicAuthSecretName or option("gitBasicAuthSecretName") or ""
 
 # Higher-level build selectors, mirroring the dispatch-packer-build action's
 # BUILD_DIR = packer/builds/<os>-<lab>-vsphere-<provisioning>. When
@@ -113,6 +118,16 @@ _workspace_config_override = {
     }
 }
 
+# Optional basic-auth workspace for cloning a private template repo over
+# HTTPS. Only emitted when a secret name is given, so the pipeline's
+# `basicAuth` workspace stays unbound (and optional) by default.
+_basicAuthWorkspaces = [
+    {
+        name = "basicAuth"
+        secret = {secretName = _gitBasicAuthSecretName}
+    }
+] if _gitBasicAuthSecretName else []
+
 # Pipeline params — keys must match build-packer-template.yaml's param names.
 _pipeline_params_override = {
     packerAction = _packerAction
@@ -148,7 +163,7 @@ _pipelineRun = tekton.PipelineRun {
         params = [{name = k, value = v} for k, v in _pipeline_params_override]
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
-        workspaces = [_workspace_config_override]
+        workspaces = [_workspace_config_override] + _basicAuthWorkspaces
     }
 }
 
