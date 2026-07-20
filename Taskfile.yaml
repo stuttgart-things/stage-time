@@ -55,7 +55,7 @@ tasks:
         machineshop render \
         --source local \
         --template templates/git-basicauth-secret.yaml \
-        --values "gitServer=github.com, user=user1, token=bla, repo=https://github.com/stuttgart-things/, name=patrick hermann, email=patrick@test.com, scm=github"
+        --values "name=packer-git-basicauth, gitServer=github.com, user=user1, token=bla, userName=patrick hermann, email=patrick@test.com"
 
   vcluster:
     desc: Create/Destory vcluster
