@@ -32,6 +32,7 @@ _pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or
 # This is the stage-time repo and is DISTINCT from the template source repo
 # below — packer templates live elsewhere (stuttgart-things/stuttgart-things).
 _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or option("pipelineRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
+
 # Pinned to a released tag, NOT "main": the git resolver fetches the pipeline
 # definition at render time, so an unpinned default silently changes what runs
 # whenever stage-time's main moves. Matches kcl/ansible. Bump alongside the
@@ -64,6 +65,7 @@ _caCertsConfigMapName = _flat_params?.caCertsConfigMapName or _env?.caCertsConfi
 _osVersion = _flat_params?.osVersion or option("osVersion") or ""
 _lab = _flat_params?.lab or _env?.lab or option("lab") or ""
 _provisioning = _flat_params?.provisioning or option("provisioning") or ""
+
 # Hypervisor segment. Was hardcoded to "vsphere", which left the *-proxmox-*
 # build dirs reachable only by passing gitWorkspaceSubdirectory explicitly.
 # Defaults to vsphere so existing callers are unaffected.
