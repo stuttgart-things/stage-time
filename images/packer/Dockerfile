@@ -10,7 +10,14 @@
 FROM ghcr.io/stuttgart-things/sthings-ansible:14.0.0
 
 # METADATA INFORMATION
-LABEL version=1.16.0
+# NOTE: this LABEL is metadata only -- it does NOT drive the published tag.
+# .github/workflows/docker-build-packer.yaml resolves the tag from
+# ARG PACKER_VERSION below, so the image tag tracks the packer BINARY version.
+# Keep the two in sync, or the label will name a version that was never
+# published (as 1.16.0 did). A consequence worth knowing: an image-content
+# change that leaves PACKER_VERSION alone republishes the SAME tag with
+# different contents -- consumers pinned to it silently get a new image.
+LABEL version=1.15.1
 LABEL maintainer="Patrick Hermann <patrick.hermann@sva.de>"
 
 # SOFTWARE
