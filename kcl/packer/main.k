@@ -32,7 +32,11 @@ _pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or
 # This is the stage-time repo and is DISTINCT from the template source repo
 # below — packer templates live elsewhere (stuttgart-things/stuttgart-things).
 _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or option("pipelineRepoUrl") or "https://github.com/stuttgart-things/stage-time.git"
-_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "main"
+# Pinned to a released tag, NOT "main": the git resolver fetches the pipeline
+# definition at render time, so an unpinned default silently changes what runs
+# whenever stage-time's main moves. Matches kcl/ansible. Bump alongside the
+# pipeline; v0.9.0 is the tag every validated packer run has used.
+_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.9.0"
 _pipelinePath = _flat_params?.pipelinePath or _env?.pipelinePath or option("pipelinePath") or "pipelines/build-packer-template.yaml"
 
 # --- Template SOURCE repo (the .pkr.hcl templates the pipeline checks out) ---
@@ -45,6 +49,14 @@ _gitRevision = _flat_params?.gitRevision or option("gitRevision") or "main"
 # authenticated by the sshCredentials workspace. Empty = workspace unbound.
 _gitBasicAuthSecretName = _flat_params?.gitBasicAuthSecretName or _env?.gitBasicAuthSecretName or option("gitBasicAuthSecretName") or ""
 
+# Name of a ConfigMap holding PEM CA certificates (*.crt / *.pem), mounted as
+# the pipeline's optional `caCerts` workspace. REQUIRED when Vault (or any
+# endpoint packer talks to) is behind a private CA, otherwise the run dies with
+#   x509: certificate signed by unknown authority
+# The CA is downloadable unauthenticated from Vault itself at /v1/pki/ca/pem.
+# Empty = workspace unbound (fine for publicly-trusted endpoints).
+_caCertsConfigMapName = _flat_params?.caCertsConfigMapName or _env?.caCertsConfigMapName or option("caCertsConfigMapName") or ""
+
 # Higher-level build selectors, mirroring the dispatch-packer-build action's
 # BUILD_DIR = packer/builds/<os>-<lab>-vsphere-<provisioning>. When
 # gitWorkspaceSubdirectory is not given explicitly but os/lab/provisioning are,
@@ -52,7 +64,11 @@ _gitBasicAuthSecretName = _flat_params?.gitBasicAuthSecretName or _env?.gitBasic
 _osVersion = _flat_params?.osVersion or option("osVersion") or ""
 _lab = _flat_params?.lab or _env?.lab or option("lab") or ""
 _provisioning = _flat_params?.provisioning or option("provisioning") or ""
-_computedSubdir = "packer/builds/${_osVersion}-${_lab}-vsphere-${_provisioning}" if (_osVersion and _lab and _provisioning) else ""
+# Hypervisor segment. Was hardcoded to "vsphere", which left the *-proxmox-*
+# build dirs reachable only by passing gitWorkspaceSubdirectory explicitly.
+# Defaults to vsphere so existing callers are unaffected.
+_hypervisor = _flat_params?.hypervisor or _env?.hypervisor or option("hypervisor") or "vsphere"
+_computedSubdir = "packer/builds/${_osVersion}-${_lab}-${_hypervisor}-${_provisioning}" if (_osVersion and _lab and _provisioning) else ""
 _gitWorkspaceSubdirectory = _flat_params?.gitWorkspaceSubdirectory or option("gitWorkspaceSubdirectory") or _computedSubdir or ""
 
 # --- Packer run configuration ---
@@ -78,6 +94,7 @@ assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a vali
 assert _pipelineRepoUrl.startswith("https://github.com/"), "pipelineRepoUrl must be a valid GitHub HTTPS URL"
 assert len(_gitRevision) > 0, "gitRevision cannot be empty"
 assert _packerAction in ["init", "validate", "build"], "packerAction must be init, validate or build"
+assert _hypervisor in ["vsphere", "proxmox", "qemu"], "hypervisor must be vsphere, proxmox or qemu"
 assert _storageSize.endswith("Mi") or _storageSize.endswith("Gi"), "storageSize must end with 'Mi' or 'Gi'"
 assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"], "storageAccessModes must be ReadWriteOnce, ReadWriteMany, or ReadOnlyMany"
 
@@ -129,6 +146,15 @@ _basicAuthWorkspaces = [
     }
 ] if _gitBasicAuthSecretName else []
 
+# Optional CA-bundle workspace, same conditional pattern as basicAuth so the
+# pipeline's optional `caCerts` workspace stays unbound by default.
+_caCertsWorkspaces = [
+    {
+        name = "caCerts"
+        configMap = {name = _caCertsConfigMapName}
+    }
+] if _caCertsConfigMapName else []
+
 # Pipeline params — keys must match build-packer-template.yaml's param names.
 _pipeline_params_override = {
     packerAction = _packerAction
@@ -164,7 +190,7 @@ _pipelineRun = tekton.PipelineRun {
         params = [{name = k, value = v} for k, v in _pipeline_params_override]
         taskRunTemplate = vars._task_run_template
         timeouts = vars._timeouts
-        workspaces = [_workspace_config_override] + _basicAuthWorkspaces
+        workspaces = [_workspace_config_override] + _basicAuthWorkspaces + _caCertsWorkspaces
     }
 }
 

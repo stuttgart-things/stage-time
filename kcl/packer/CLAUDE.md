@@ -25,8 +25,26 @@ a DIFFERENT repo than the pipeline:
 - `gitRepoUrl`/`gitRevision`/`gitWorkspaceSubdirectory` → pipeline PARAMS that
   tell the git-clone task which `*.pkr.hcl` to check out
   (`stuttgart-things/stuttgart-things`, `packer/builds/<os>-<lab>-vsphere-<prov>/`).
-- `osVersion`+`lab`+`provisioning` compose `gitWorkspaceSubdirectory` when it
-  isn't set explicitly (mirrors the `dispatch-packer-build` action's BUILD_DIR).
+- `osVersion`+`lab`+`hypervisor`+`provisioning` compose
+  `gitWorkspaceSubdirectory` when it isn't set explicitly (mirrors the
+  `dispatch-packer-build` action's BUILD_DIR). `hypervisor` defaults to
+  `vsphere`; before 0.3.0 it was hardcoded, leaving the `*-proxmox-*` build
+  dirs reachable only via an explicit `gitWorkspaceSubdirectory`.
+
+## Optional workspaces
+Two workspaces are emitted only when their name field is non-empty, so the
+pipeline's optional workspaces stay unbound by default:
+- `gitBasicAuthSecretName` → `basicAuth` (required to clone the private
+  template repo over https).
+- `caCertsConfigMapName` → `caCerts` (required when Vault is behind a private
+  CA, else `x509: certificate signed by unknown authority`). Added in 0.4.0 —
+  before that the module emitted no `caCerts` workspace at all, so the
+  Crossplane XR path could not build against the LabUL Vault even though the
+  pipeline supported it.
+
+`pipelineRevision` defaults to a PINNED tag, not `main`: the git resolver
+fetches the pipeline definition at render time, so an unpinned default
+silently changes what runs whenever stage-time's main moves.
 
 ## Invocation contract (two modes)
 Same as `kcl-tekton-pr`: Composition mode (`params.oxr.spec` + `ctx` env +
@@ -47,8 +65,14 @@ Always render before bumping the version — `kcl` is the source of truth for
 whether the module is valid.
 
 ## Consumer
-`stuttgart-things/crossplane-configurations` → `cicd/packer-build` (planned):
+`stuttgart-things/crossplane-configurations` → `cicd/packer-build`:
 the Composition's `render-pipelinerun` step pins a specific tag of this module.
 The pinned version MUST be published or the Configuration's verify CI fails
 with `failed to resolve <v>: ...kcl-tekton-pr-packer:<v>: not found`. Order:
 bump `kcl.mod` → `kcl mod push` → bump the pin in the consumer.
+
+**The ghcr package is PRIVATE** (unlike the ansible module's `kcl-tekton-pr`,
+which is public). function-kcl pulls anonymously, so any Composition pinning
+this module fails to render with `401 unauthorized` until the package
+visibility is flipped to public in the GHCR UI — there is no REST endpoint for
+it. This is why `cicd/packer-build` cannot render end to end yet.
