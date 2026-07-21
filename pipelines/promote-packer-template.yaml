@@ -1,0 +1,117 @@
+---
+# Promote a freshly built packer template to the golden image.
+#
+# Deliberately a SEPARATE pipeline from build-packer-template rather than a
+# task appended to it: promotion must be gated on the template having been
+# tested, and a build pipeline has no way to know that. The gate lives one
+# layer up (the PackerRelease XR in crossplane-configurations), which creates
+# this PipelineRun only once its smoke test has passed.
+#
+# Everything this pipeline needs it takes as parameters -- there is no git
+# clone, no workspace to populate. The only workspace is the optional CA
+# bundle, needed because the LabUL Vault holding the vCenter credentials sits
+# behind a private CA.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: promote-packer-template
+spec:
+  workspaces:
+    - name: caCerts
+      optional: true
+  params:
+    - name: templateName
+      type: string
+      description: >-
+        the freshly built template to promote, e.g.
+        "ubuntu24-base-20260721-1131" -- the `template-name` result emitted by
+        build-packer-template
+    - name: goldenName
+      type: string
+      description: name the golden image is published under, e.g. "sthings-u24"
+    - name: buildFolder
+      type: string
+      description: inventory path packer builds into, e.g. "/LabUL/vm/stuttgart-things/packer"
+    - name: goldenFolder
+      type: string
+      description: inventory path golden images live in, e.g. "/LabUL/vm/stuttgart-things/vm-templates"
+    - name: previousSuffix
+      type: string
+      default: "-previous"
+      description: >-
+        suffix for the retained previous generation. Exactly one is kept, so a
+        bad golden image is one rename away from being rolled back.
+    - name: datacenter
+      type: string
+      default: ""
+      description: vCenter datacenter, e.g. "/LabUL"
+    - name: insecureSkipVerify
+      type: string
+      default: "true"
+      description: skip vCenter TLS verification (self-signed certs in the labs)
+    - name: vaultSecretPath
+      type: string
+      default: "cloud/data/vsphere"
+      description: Vault KV v2 path holding the vCenter credentials
+    - name: vaultSecretName
+      type: string
+      default: "vault"
+      description: name of the Secret carrying VAULT_ADDR / VAULT_TOKEN
+    - name: userHome
+      type: string
+      default: "/home/nonroot"
+    - name: workingImage
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
+      description: must be >= 2.0.0 -- govc was added in that image version
+  results:
+    - name: promoted-template
+      description: inventory path the golden image now lives at
+      value: $(tasks.promote.results.promoted-template)
+    - name: previous-template
+      description: >-
+        inventory path the superseded golden image was renamed to, or empty on
+        a first promotion. Roll back by renaming it back to goldenName.
+      value: $(tasks.promote.results.previous-template)
+  tasks:
+    - name: promote
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          # Pinned tag, not "main": the git resolver fetches at render time, so
+          # an unpinned default silently changes what runs. Bump alongside the
+          # task. Must be a tag that CONTAINS tasks/execute-govc.yaml.
+          - name: revision
+            value: v0.10.0
+          - name: pathInRepo
+            value: tasks/execute-govc.yaml
+      workspaces:
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: ACTION
+          value: promote
+        - name: TEMPLATE_NAME
+          value: $(params.templateName)
+        - name: GOLDEN_NAME
+          value: $(params.goldenName)
+        - name: BUILD_FOLDER
+          value: $(params.buildFolder)
+        - name: GOLDEN_FOLDER
+          value: $(params.goldenFolder)
+        - name: PREVIOUS_SUFFIX
+          value: $(params.previousSuffix)
+        - name: DATACENTER
+          value: $(params.datacenter)
+        - name: INSECURE_SKIP_VERIFY
+          value: $(params.insecureSkipVerify)
+        - name: VAULT_SECRET_PATH
+          value: $(params.vaultSecretPath)
+        - name: vault-secret-name
+          value: $(params.vaultSecretName)
+        - name: USER_HOME
+          value: $(params.userHome)
+        - name: WORKING_IMAGE
+          value: $(params.workingImage)
