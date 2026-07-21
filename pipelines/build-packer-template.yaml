@@ -59,7 +59,7 @@ spec:
       description: enable packer debug logging (1 to enable, empty to disable)
     - name: packerWorkingImage
       type: string
-      default: "ghcr.io/stuttgart-things/sthings-packer:1.15.1"
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
       description: the image on which packer will run
     - name: credentialsSecretName
       type: string
