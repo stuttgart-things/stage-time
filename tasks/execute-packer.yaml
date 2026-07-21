@@ -72,9 +72,14 @@ spec:
       type: string
       default: "/home/nonroot"
     - name: WORKING_IMAGE
-      description: the image on which packer will run
+      description: >-
+        the image on which packer will run. The tag is the IMAGE version, not
+        the packer version — those were the same number until 2.0.0, which is
+        why an image change used to republish an existing tag with different
+        contents. To pin a packer BINARY version instead, use the floating
+        `:packer-<version>` alias, but note it moves.
       type: string
-      default: "ghcr.io/stuttgart-things/sthings-packer:1.15.1"
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
     - name: credentials-secret-name
       description: >-
         name of an optional secret whose keys are injected as environment
