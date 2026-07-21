@@ -99,12 +99,42 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Resolve image version from Dockerfile
+      # Two independent versions, both read from the Dockerfile so there is one
+      # source of truth. IMAGE_VERSION names the image; PACKER_VERSION only
+      # names the binary inside it and is published as a FLOATING alias.
+      - name: Resolve versions from Dockerfile
         id: meta
         run: |
-          version=$(grep -oP '^ARG PACKER_VERSION=\K.*' images/packer/Dockerfile)
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "Resolved version: ${version}"
+          set -euo pipefail
+          image_version=$(grep -oP '^ARG IMAGE_VERSION=\K.*' images/packer/Dockerfile)
+          packer_version=$(grep -oP '^ARG PACKER_VERSION=\K.*' images/packer/Dockerfile)
+          # Fail loudly rather than publishing ":" if an ARG is renamed away.
+          [ -n "${image_version}" ] || { echo "::error::ARG IMAGE_VERSION not found in images/packer/Dockerfile"; exit 1; }
+          [ -n "${packer_version}" ] || { echo "::error::ARG PACKER_VERSION not found in images/packer/Dockerfile"; exit 1; }
+          echo "version=${image_version}" >> "$GITHUB_OUTPUT"
+          echo "packer_version=${packer_version}" >> "$GITHUB_OUTPUT"
+          echo "image: ${image_version} / packer: ${packer_version}"
+
+      # An image version must be published exactly once. Overwriting it would
+      # reintroduce the very problem this split fixes, so refuse rather than
+      # silently mutate a tag someone has pinned. Bump ARG IMAGE_VERSION.
+      #
+      # The login is separate from the lookup on purpose: an auth failure and a
+      # missing tag both make `docker manifest inspect` exit non-zero, so
+      # treating "inspect failed" as "tag is free" would let a broken token
+      # wave an overwrite through. Log in first and fail hard if that fails.
+      - name: Refuse to overwrite an existing image version
+        env:
+          TAG: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${REGISTRY_PASSWORD}" \
+            | docker login "${REGISTRY}" -u "${REGISTRY_USERNAME}" --password-stdin
+          if docker manifest inspect "${REGISTRY}/${IMAGE}:${TAG}" >/dev/null 2>&1; then
+            echo "::error::${REGISTRY}/${IMAGE}:${TAG} already exists. Bump ARG IMAGE_VERSION in images/packer/Dockerfile."
+            exit 1
+          fi
+          echo "${TAG} is free"
 
       - name: Dagger Build and Push (ghcr :sha)
         uses: dagger/dagger-for-github@v8.4.1
@@ -140,6 +170,9 @@ jobs:
 
       # crane copy = re-tag by digest (no rebuild). Source is the private ghcr
       # :sha just pushed, so source creds are passed alongside target creds.
+      #
+      # :<IMAGE_VERSION> is the tag to pin. The step above guarantees it did
+      # not already exist, so it is immutable in practice.
       - name: Crane re-tag :sha → :version
         uses: dagger/dagger-for-github@v8.4.1
         with:
@@ -149,6 +182,27 @@ jobs:
             copy
             --source ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
             --target ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            --source-registry ${{ env.REGISTRY }}
+            --source-username ${{ github.actor }}
+            --source-password env:REGISTRY_PASSWORD
+            --target-registry ${{ env.REGISTRY }}
+            --target-username ${{ github.actor }}
+            --target-password env:REGISTRY_PASSWORD
+          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
+
+      # A FLOATING alias: "whatever image currently carries this packer
+      # binary". Prefixed so it can never be mistaken for an image version --
+      # a bare `:1.15.1` used to mean both, which is how a pinned tag came to
+      # change underneath its consumers. Nothing should pin this.
+      - name: Crane re-tag :sha → :packer-<version>
+        uses: dagger/dagger-for-github@v8.4.1
+        with:
+          version: v0.20.3
+          module: github.com/stuttgart-things/dagger/crane@v0.91.0
+          call: >-
+            copy
+            --source ${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}
+            --target ${{ env.REGISTRY }}/${{ env.IMAGE }}:packer-${{ steps.meta.outputs.packer_version }}
             --source-registry ${{ env.REGISTRY }}
             --source-username ${{ github.actor }}
             --source-password env:REGISTRY_PASSWORD
@@ -181,6 +235,13 @@ jobs:
             echo ""
             echo "Built once as \`:${{ github.sha }}\`, crane-promoted to:"
             echo ""
-            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ steps.meta.outputs.version }}\`"
-            echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE }}:latest\`"
+            echo "| Tag | Meaning | Pin it? |"
+            echo "|---|---|---|"
+            echo "| \`:${{ steps.meta.outputs.version }}\` | this image, published once | **yes** |"
+            echo "| \`:packer-${{ steps.meta.outputs.packer_version }}\` | floating: latest image carrying packer ${{ steps.meta.outputs.packer_version }} | no |"
+            echo "| \`:latest\` | floating | no |"
+            echo ""
+            echo "Tags below \`2.0.0\` (\`:1.15.1\` and earlier) were named after the"
+            echo "packer binary and are no longer written to — they now keep whatever"
+            echo "content they last had."
           } >> "$GITHUB_STEP_SUMMARY"
