@@ -1,0 +1,422 @@
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: execute-govc
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/categories: "infrastructure"
+    tekton.dev/pipelines.minVersion: "0.17.0"
+    tekton.dev/platforms: "linux/amd64,linux/arm64"
+    tekton.dev/tags: "vsphere,vcenter,govc,image-build"
+spec:
+  description: >-
+    vCenter object operations with govc: promote a freshly built packer
+    template to the golden image (keeping one previous generation), or run the
+    rename/move/delete primitives on their own.
+  workspaces:
+    - name: ca-certs
+      description: >-
+        optional workspace with private CA certificates (*.crt / *.pem) that
+        are trusted per run. REQUIRED when Vault is behind a private CA (LabUL
+        is), otherwise reading the vCenter credentials fails with
+        "x509: certificate signed by unknown authority". Also used for vCenter
+        itself when INSECURE_SKIP_VERIFY is "false".
+      optional: true
+  params:
+    - name: ACTION
+      description: >-
+        promote — the full golden-image swap (see PROMOTE below).
+        rename / move / delete — single primitives on SOURCE.
+      type: string
+      default: "promote"
+
+    # --- promote ---------------------------------------------------------
+    - name: TEMPLATE_NAME
+      description: >-
+        the freshly built template to promote, e.g.
+        "ubuntu24-base-20260721-1131". This is the `template-name` result
+        emitted by execute-packer.
+      type: string
+      default: ""
+    - name: GOLDEN_NAME
+      description: >-
+        the name the golden image is published under, e.g. "sthings-u24".
+        This is what consumers reference, so it must match the platform
+        EnvironmentConfig's template map.
+      type: string
+      default: ""
+    - name: BUILD_FOLDER
+      description: >-
+        inventory path of the folder packer builds into, e.g.
+        "/LabUL/vm/stuttgart-things/packer"
+      type: string
+      default: ""
+    - name: GOLDEN_FOLDER
+      description: >-
+        inventory path of the folder golden images live in, e.g.
+        "/LabUL/vm/stuttgart-things/vm-templates"
+      type: string
+      default: ""
+    - name: PREVIOUS_SUFFIX
+      description: >-
+        suffix for the retained previous generation. Promotion keeps exactly
+        one, so a bad golden image is one rename away from being rolled back.
+      type: string
+      default: "-previous"
+
+    # --- primitives ------------------------------------------------------
+    - name: SOURCE
+      description: inventory path of the object to act on (rename/move/delete)
+      type: string
+      default: ""
+    - name: TARGET
+      description: >-
+        rename — the new NAME (not a path).
+        move — the destination FOLDER path.
+        delete — unused.
+      type: string
+      default: ""
+
+    # --- connection ------------------------------------------------------
+    - name: DATACENTER
+      description: vCenter datacenter, e.g. "/LabUL". Empty lets govc pick when there is only one.
+      type: string
+      default: ""
+    - name: INSECURE_SKIP_VERIFY
+      description: >-
+        skip vCenter TLS verification. Defaults to "true" because the
+        stuttgart-things vCenters present self-signed certificates. Set to
+        "false" AND bind the ca-certs workspace for the better posture —
+        skipping verification here hides exactly the class of failure that
+        workspace exists to surface.
+      type: string
+      default: "true"
+
+    # --- vault -----------------------------------------------------------
+    # The vCenter credentials are read from Vault at run time rather than
+    # mounted as their own Secret: the `vault` Secret is already wired into
+    # every packer PipelineRun, and packer's own templates read the same path,
+    # so this introduces no new credential convention to keep in sync.
+    #
+    # NOTE machineshop is deliberately NOT used, despite the legacy GH Action
+    # doing so: it is not in this image (the rebase onto sthings-ansible
+    # dropped it). curl + jq are, and a Vault KV v2 read is one GET.
+    - name: VAULT_SECRET_PATH
+      description: Vault KV v2 read path holding the vCenter credentials
+      type: string
+      default: "cloud/data/vsphere"
+    - name: VAULT_KEY_USERNAME
+      description: key in the Vault secret holding the vCenter username
+      type: string
+      default: "username"
+    - name: VAULT_KEY_PASSWORD
+      description: key in the Vault secret holding the vCenter password
+      type: string
+      default: "password"
+    - name: VAULT_KEY_SERVER
+      description: key in the Vault secret holding the vCenter host/IP
+      type: string
+      default: "ip"
+    - name: vault-secret-name
+      description: name of the vault secret
+      type: string
+      default: "vault"
+    - name: vault-secret-key-addr
+      description: vault addr key in the secret
+      type: string
+      default: "VAULT_ADDR"
+    - name: vault-secret-key-token
+      description: vault token key in the secret
+      type: string
+      default: "VAULT_TOKEN"
+    - name: vault-secret-key-namespace
+      description: vault namespace key in the secret
+      type: string
+      default: "VAULT_NAMESPACE"
+
+    - name: USER_HOME
+      description: absolute path to the user's home directory
+      type: string
+      default: "/home/nonroot"
+    - name: WORKING_IMAGE
+      description: >-
+        image providing govc, curl and jq. Must be >= 2.0.0 — govc was added
+        in that image version.
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
+
+  results:
+    - name: action-performed
+      description: the govc action that was executed
+    - name: promoted-template
+      description: >-
+        inventory path the golden image now lives at. Empty for the
+        primitives.
+    - name: previous-template
+      description: >-
+        inventory path the superseded golden image was renamed to, or empty
+        when there was none (first-ever promotion). Roll back by renaming this
+        back to GOLDEN_NAME.
+
+  stepTemplate:
+    image: "$(params.WORKING_IMAGE)"
+    workingDir: /tmp
+    env:
+      - name: HOME
+        value: $(params.USER_HOME)
+      # Per-run CA trust, same contract as execute-packer/execute-tofu: the
+      # bundle is written at runtime, never baked into the image.
+      - name: SSL_CERT_FILE
+        value: /tmp/.tekton-ca-bundle.crt
+    securityContext:
+      privileged: false
+      runAsNonRoot: true
+      runAsUser: 65532
+    computeResources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+  steps:
+    # ONE step on purpose. Building the CA bundle, reading the credentials and
+    # running govc are separate concerns, but splitting them across steps would
+    # mean persisting the vCenter password to a shared volume for the next
+    # container to pick up. Keeping it in one process means the password only
+    # ever lives in this step's environment.
+    - name: govc-action
+      env:
+        - name: ACTION
+          value: $(params.ACTION)
+        - name: TEMPLATE_NAME
+          value: $(params.TEMPLATE_NAME)
+        - name: GOLDEN_NAME
+          value: $(params.GOLDEN_NAME)
+        - name: BUILD_FOLDER
+          value: $(params.BUILD_FOLDER)
+        - name: GOLDEN_FOLDER
+          value: $(params.GOLDEN_FOLDER)
+        - name: PREVIOUS_SUFFIX
+          value: $(params.PREVIOUS_SUFFIX)
+        - name: SOURCE
+          value: $(params.SOURCE)
+        - name: TARGET
+          value: $(params.TARGET)
+        - name: GOVC_DATACENTER
+          value: $(params.DATACENTER)
+        - name: GOVC_INSECURE
+          value: $(params.INSECURE_SKIP_VERIFY)
+        - name: VAULT_SECRET_PATH
+          value: $(params.VAULT_SECRET_PATH)
+        - name: VAULT_KEY_USERNAME
+          value: $(params.VAULT_KEY_USERNAME)
+        - name: VAULT_KEY_PASSWORD
+          value: $(params.VAULT_KEY_PASSWORD)
+        - name: VAULT_KEY_SERVER
+          value: $(params.VAULT_KEY_SERVER)
+        - name: CA_CERTS_BOUND
+          value: $(workspaces.ca-certs.bound)
+        - name: CA_CERTS_PATH
+          value: $(workspaces.ca-certs.path)
+        - name: VAULT_ADDR
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-addr)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-token)
+              name: $(params.vault-secret-name)
+              optional: true
+        - name: VAULT_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              key: $(params.vault-secret-key-namespace)
+              name: $(params.vault-secret-name)
+              optional: true
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # ---------------------------------------------------------------
+        # CA trust
+        # ---------------------------------------------------------------
+        BUNDLE="${SSL_CERT_FILE}"
+        : > "${BUNDLE}"
+        if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+          cat /etc/ssl/certs/ca-certificates.crt >> "${BUNDLE}"
+        fi
+        if [ "${CA_CERTS_BOUND}" = "true" ]; then
+          found=0
+          for crt in "${CA_CERTS_PATH}"/*.crt "${CA_CERTS_PATH}"/*.pem; do
+            [ -f "${crt}" ] || continue
+            printf '\n' >> "${BUNDLE}"
+            cat "${crt}" >> "${BUNDLE}"
+            found=1
+          done
+          echo "ca-certs workspace bound (private CAs found: ${found})"
+        else
+          echo "no ca-certs workspace bound - system trust store only"
+        fi
+        # govc reads its own variable rather than SSL_CERT_FILE.
+        export GOVC_TLS_CA_CERTS="${BUNDLE}"
+
+        # ---------------------------------------------------------------
+        # vCenter credentials from Vault
+        # ---------------------------------------------------------------
+        [ -n "${VAULT_ADDR:-}" ] || { echo "ERROR: VAULT_ADDR is empty - is the '$(params.vault-secret-name)' Secret present?" >&2; exit 1; }
+        [ -n "${VAULT_TOKEN:-}" ] || { echo "ERROR: VAULT_TOKEN is empty. packer's vault() and this task both need a TOKEN; ROLE_ID/SECRET_ID alone are not enough." >&2; exit 1; }
+
+        NS_HEADER=()
+        [ -n "${VAULT_NAMESPACE:-}" ] && NS_HEADER=(-H "X-Vault-Namespace: ${VAULT_NAMESPACE}")
+
+        HTTP_CODE=$(curl -sS --cacert "${BUNDLE}" -o /tmp/vault.json -w '%{http_code}' \
+          -H "X-Vault-Token: ${VAULT_TOKEN}" "${NS_HEADER[@]}" \
+          "${VAULT_ADDR%/}/v1/${VAULT_SECRET_PATH}")
+        if [ "${HTTP_CODE}" != "200" ]; then
+          # Never echo the body: a Vault error response can quote request data.
+          echo "ERROR: reading ${VAULT_SECRET_PATH} from Vault returned HTTP ${HTTP_CODE}" >&2
+          exit 1
+        fi
+
+        GOVC_USERNAME=$(jq -r --arg k "${VAULT_KEY_USERNAME}" '.data.data[$k] // empty' /tmp/vault.json)
+        GOVC_PASSWORD=$(jq -r --arg k "${VAULT_KEY_PASSWORD}" '.data.data[$k] // empty' /tmp/vault.json)
+        VC_SERVER=$(jq -r --arg k "${VAULT_KEY_SERVER}" '.data.data[$k] // empty' /tmp/vault.json)
+        rm -f /tmp/vault.json
+        for v in GOVC_USERNAME GOVC_PASSWORD VC_SERVER; do
+          [ -n "${!v}" ] || { echo "ERROR: ${VAULT_SECRET_PATH} has no usable value for ${v}" >&2; exit 1; }
+        done
+        export GOVC_USERNAME GOVC_PASSWORD
+        export GOVC_URL="https://${VC_SERVER}/sdk"
+        echo "vCenter: ${VC_SERVER} (insecure=${GOVC_INSECURE})"
+
+        # ---------------------------------------------------------------
+        # helpers
+        # ---------------------------------------------------------------
+        # `govc ls` prints the path when the object exists and nothing when it
+        # does not. Errors are swallowed so a missing object reads as absent
+        # rather than aborting under set -e.
+        exists() { [ -n "$(govc ls "$1" 2>/dev/null || true)" ]; }
+
+        # object.rename / object.destroy / object.mv are used rather than
+        # vm.change / vm.markasvm+vm.destroy: these operate on the managed
+        # object directly, so they work on TEMPLATES without first converting
+        # them back into VMs (which needs a resource pool to convert into).
+        require() { exists "$1" || { echo "ERROR: not found in vCenter: $1" >&2; exit 1; }; }
+
+        case "${ACTION}" in
+          promote)
+            for v in TEMPLATE_NAME GOLDEN_NAME BUILD_FOLDER GOLDEN_FOLDER; do
+              [ -n "${!v}" ] || { echo "ERROR: ACTION=promote requires ${v}" >&2; exit 1; }
+            done
+
+            SRC="${BUILD_FOLDER%/}/${TEMPLATE_NAME}"
+            GOLD="${GOLDEN_FOLDER%/}/${GOLDEN_NAME}"
+            PREV_NAME="${GOLDEN_NAME}${PREVIOUS_SUFFIX}"
+            PREV="${GOLDEN_FOLDER%/}/${PREV_NAME}"
+
+            # --- preflight: every check BEFORE the first mutation, so a
+            # --- typo fails with vCenter untouched rather than half-swapped.
+            require "${SRC}"
+            require "${GOLDEN_FOLDER}"
+
+            # Refuse to run against a half-promoted inventory. If the golden
+            # name is free but a -previous exists, an earlier promote died
+            # between demote and promote -- and that -previous IS the last
+            # known-good image. Destroying it (step 1 below) would throw away
+            # the only remaining copy.
+            if ! exists "${GOLD}" && exists "${PREV}"; then
+              echo "ERROR: ${GOLD} is missing but ${PREV} exists." >&2
+              echo "       A previous promote left the inventory half-swapped and ${PREV_NAME}" >&2
+              echo "       is now the only good image. Rename it back to ${GOLDEN_NAME} before retrying:" >&2
+              echo "         govc object.rename '${PREV}' '${GOLDEN_NAME}'" >&2
+              exit 1
+            fi
+
+            echo "=========================================="
+            echo "PROMOTE ${TEMPLATE_NAME} -> ${GOLDEN_NAME}"
+            echo "=========================================="
+
+            # 1. drop the generation we are about to replace
+            if exists "${PREV}"; then
+              echo "-> destroying superseded ${PREV}"
+              govc object.destroy "${PREV}"
+            else
+              echo "-> no existing ${PREV_NAME}, nothing to destroy"
+            fi
+
+            # 2. demote the current golden. This FREES THE NAME before the new
+            #    template takes it. The old workflow renamed the new one first,
+            #    leaving two objects called ${GOLDEN_NAME} in different folders
+            #    -- legal in vCenter, but anything resolving templates by name
+            #    instead of by inventory path (data.vsphere_virtual_machine in
+            #    the vsphere-vm module, notably) can then match the wrong one.
+            PREVIOUS_RESULT=""
+            if exists "${GOLD}"; then
+              echo "-> demoting ${GOLD} to ${PREV_NAME}"
+              govc object.rename "${GOLD}" "${PREV_NAME}"
+              PREVIOUS_RESULT="${PREV}"
+            else
+              echo "-> no existing ${GOLDEN_NAME}, first promotion"
+            fi
+
+            # 3. take the golden name
+            echo "-> renaming ${SRC} to ${GOLDEN_NAME}"
+            govc object.rename "${SRC}" "${GOLDEN_NAME}"
+            RENAMED="${BUILD_FOLDER%/}/${GOLDEN_NAME}"
+
+            # 4. move it where consumers look
+            echo "-> moving ${RENAMED} into ${GOLDEN_FOLDER}"
+            govc object.mv "${RENAMED}" "${GOLDEN_FOLDER}"
+
+            require "${GOLD}"
+            echo "=========================================="
+            echo "promoted: ${GOLD}"
+            [ -n "${PREVIOUS_RESULT}" ] && echo "rollback:  govc object.rename '${PREVIOUS_RESULT}' '${GOLDEN_NAME}'"
+            echo "=========================================="
+            printf '%s' "${GOLD}" > "$(results.promoted-template.path)"
+            printf '%s' "${PREVIOUS_RESULT}" > "$(results.previous-template.path)"
+            ;;
+
+          rename)
+            [ -n "${SOURCE}" ] && [ -n "${TARGET}" ] || { echo "ERROR: ACTION=rename requires SOURCE and TARGET" >&2; exit 1; }
+            require "${SOURCE}"
+            govc object.rename "${SOURCE}" "${TARGET}"
+            echo "renamed ${SOURCE} -> ${TARGET}"
+            printf '%s' "" > "$(results.promoted-template.path)"
+            printf '%s' "" > "$(results.previous-template.path)"
+            ;;
+
+          move)
+            [ -n "${SOURCE}" ] && [ -n "${TARGET}" ] || { echo "ERROR: ACTION=move requires SOURCE and TARGET" >&2; exit 1; }
+            require "${SOURCE}"
+            require "${TARGET}"
+            govc object.mv "${SOURCE}" "${TARGET}"
+            echo "moved ${SOURCE} -> ${TARGET}"
+            printf '%s' "" > "$(results.promoted-template.path)"
+            printf '%s' "" > "$(results.previous-template.path)"
+            ;;
+
+          delete)
+            # Deliberately NOT tolerant of a missing object, and deliberately
+            # not `|| true`. The legacy workflow ignored delete failures and
+            # carried on to the move, which produced a half-promoted vCenter
+            # with duplicate names and no error anywhere.
+            [ -n "${SOURCE}" ] || { echo "ERROR: ACTION=delete requires SOURCE" >&2; exit 1; }
+            require "${SOURCE}"
+            govc object.destroy "${SOURCE}"
+            echo "destroyed ${SOURCE}"
+            printf '%s' "" > "$(results.promoted-template.path)"
+            printf '%s' "" > "$(results.previous-template.path)"
+            ;;
+
+          *)
+            echo "ERROR: unsupported ACTION '${ACTION}' (expected promote, rename, move or delete)" >&2
+            exit 1
+            ;;
+        esac
+
+        printf '%s' "${ACTION}" > "$(results.action-performed.path)"
