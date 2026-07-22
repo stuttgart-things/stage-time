@@ -1,7 +1,7 @@
 [package]
 name = "kcl-tekton-pr"
 edition = "v0.11.2"
-version = "0.12.0"
+version = "0.13.0"
 
 [dependencies]
 tekton-pipelines = "1.0.0"
