@@ -102,7 +102,20 @@ assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"]
 
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
-_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or "packer-build-run"
+
+# Derived from pipelineRunName rather than a fixed literal: the Object name
+# must be unique per XR, or two PackerBuilds in one namespace compose the same
+# Object and the second one never syncs --
+#   ReconcileError: Unsynced resources: packer-build-run
+# with no event naming the collision and no PipelineRun behind the XR.
+#
+# The unnamed case deliberately keeps the old literal instead of reaching for
+# the timestamped fallback below: that value is recomputed from datetime.now()
+# on every render, so using it here would rename the Object each reconcile and
+# trade a collision for unbounded churn. An XR that wants to coexist with
+# others sets pipelineRunName (as cicd/packer-release does).
+_defaultObjectName = "{}-run".format(_pipelineRunName) if _pipelineRunName else "packer-build-run"
+_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or _defaultObjectName
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
 _crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "120"
