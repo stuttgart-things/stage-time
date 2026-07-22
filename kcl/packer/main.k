@@ -102,6 +102,7 @@ assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"]
 
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
+
 # Derived from pipelineRunName rather than a fixed literal: the Object name
 # must be unique per XR, or two PackerBuilds in one namespace compose the same
 # Object and the second one never syncs --
