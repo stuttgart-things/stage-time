@@ -198,12 +198,21 @@ _crossplaneObject = {
         }
     }
     spec = {
-        # A PipelineRun is one-shot and Tekton rejects any spec update once it
-        # completes. The default ["*"] claims Update, so provider-kubernetes'
-        # observe dry-run SSA gets denied by the webhook, the observe errors and
-        # the finalizer is never released — deleting the XR after a successful
-        # run strands the Object forever. Create it, watch it, never touch it.
-        managementPolicies = ["Observe", "Create"]
+        # Spelled out rather than left at the default ["*"], and BOTH halves of
+        # this list matter.
+        #
+        # Update is excluded: a PipelineRun is one-shot and Tekton rejects any
+        # spec update once it completes. Claiming Update makes
+        # provider-kubernetes' observe dry-run SSA get denied by the webhook,
+        # the observe errors, the finalizer is never released, and deleting the
+        # XR after a successful run strands the Object forever.
+        #
+        # Delete is included: without it provider-kubernetes releases the Object
+        # without touching the external resource, so the PipelineRun outlives
+        # the XR with no owner reference and no finalizer — nothing in the
+        # cluster ever collects it. 0.9.0 dropped Update and Delete together and
+        # traded a stranded Object for a stranded PipelineRun (issue #75).
+        managementPolicies = ["Observe", "Create", "Delete"]
         forProvider = {
             manifest = _pipelineRun
         }
