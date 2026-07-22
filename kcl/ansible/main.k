@@ -92,7 +92,29 @@ assert _decryptSops != "true" or _gitPath == "pipelines/execute-ansible-playbook
 
 # --- Crossplane wrapper settings ---
 _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane") or False
-_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or "tekton-pipeline-run"
+
+# Derived from pipelineRunName rather than a fixed literal: the Object name
+# must be unique per XR, or two AnsibleRuns in one namespace compose the same
+# Object and the second one never syncs --
+#   ReconcileError: Unsynced resources: tekton-pipeline-run
+# with no event naming the collision and no PipelineRun behind the XR.
+# pipelineRunName is XRD-required on AnsibleRun, so this path applies to every
+# XR; consumers that already set crossplaneObjectName (vm-provision does) are
+# unaffected.
+#
+# The unnamed case deliberately keeps the old literal instead of reaching for
+# the timestamped fallback below: that value is recomputed from datetime.now()
+# on every render, so using it here would rename the Object each reconcile and
+# trade a collision for unbounded churn.
+#
+# Deliberately the pipelineRunName ITSELF, not a suffixed variant: that is
+# already what the only real consumer sets explicitly
+# (crossplane-configurations machinery/vm-provision), so adopting it as the
+# default changes nothing for existing runs, and it makes the claim already
+# printed in cicd/ansible-run/examples/xr-min.yaml true. An Object and a
+# PipelineRun are different kinds, so sharing a name costs nothing.
+_defaultObjectName = _pipelineRunName if _pipelineRunName else "tekton-pipeline-run"
+_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or _defaultObjectName
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
 _crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "60"
