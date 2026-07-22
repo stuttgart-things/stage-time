@@ -71,8 +71,16 @@ The pinned version MUST be published or the Configuration's verify CI fails
 with `failed to resolve <v>: ...kcl-tekton-pr-packer:<v>: not found`. Order:
 bump `kcl.mod` → `kcl mod push` → bump the pin in the consumer.
 
-**The ghcr package is PRIVATE** (unlike the ansible module's `kcl-tekton-pr`,
-which is public). function-kcl pulls anonymously, so any Composition pinning
-this module fails to render with `401 unauthorized` until the package
-visibility is flipped to public in the GHCR UI — there is no REST endpoint for
-it. This is why `cicd/packer-build` cannot render end to end yet.
+**The ghcr package must stay PUBLIC.** function-kcl pulls anonymously, so any
+Composition pinning this module fails to render with `401 unauthorized` the
+moment the package is private. A new package defaults to private, and the fix
+is UI-only — `PATCH /orgs/{org}/packages/container/{pkg}` returns 404. Check
+after every first push of a new package:
+
+```bash
+T=$(curl -s "https://ghcr.io/token?scope=repository:stuttgart-things/kcl-tekton-pr-packer:pull" | jq -r .token)
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $T" \
+  https://ghcr.io/v2/stuttgart-things/kcl-tekton-pr-packer/manifests/<version>
+```
+
+200 = public, 401 = private.
