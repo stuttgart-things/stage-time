@@ -1,0 +1,169 @@
+---
+# execute-tofu — clone a repo, then run OpenTofu against a subdirectory of it,
+# authenticating to Vault via AppRole (role_id + secret_id from a Secret).
+#
+# The AppRole is the point: role_id/secret_id are long-lived login credentials,
+# but each run exchanges them for a SHORT-LIVED Vault token carrying only the
+# policy that AppRole is bound to. Nothing static and privileged is left behind,
+# which is exactly what a bootstrap step that provisions Vault auth backends
+# wants — mirrors execute-ansible-playbooks in shape.
+#
+# Everything resolves over the git resolver: this Pipeline references the tasks
+# by git, and a PipelineRun references this Pipeline by git.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: execute-tofu
+spec:
+  workspaces:
+    - name: shared-workspace
+    - name: sshCredentials
+      optional: true
+    - name: caCerts
+      optional: true
+      description: >-
+        Optional workspace with private CA certificates trusted per run
+        (passed to execute-tofu's ca-certs workspace).
+  params:
+    # ---- source ----
+    - name: gitRepoUrl
+      type: string
+      default: ""
+      description: source git repo holding the OpenTofu configuration
+    - name: gitRevision
+      type: string
+      default: "main"
+      description: revision of the source git repo
+    - name: gitWorkspaceSubdirectory
+      type: string
+      default: ""
+      description: subdirectory the repo is cloned into on the workspace
+    # ---- tofu ----
+    - name: tofuAction
+      type: string
+      default: "plan"
+      description: opentofu action (plan, apply or destroy)
+    - name: subDirectory
+      type: string
+      default: ""
+      description: subdirectory of the workspace holding the tofu configuration
+    - name: autoApprove
+      type: string
+      default: "true"
+      description: skip interactive approval for apply/destroy
+    - name: tfVars
+      type: array
+      default: []
+      description: extra variables as key+-value pairs (written to tekton.auto.tfvars)
+    - name: tfVarsFile
+      type: string
+      default: ""
+      description: tfvars file as b64 (merged via *.auto.tfvars, wins over tfVars)
+    - name: backendConfig
+      type: array
+      default: []
+      description: backend-config key+-value pairs passed to tofu init
+    - name: initExtraArgs
+      type: string
+      default: ""
+      description: extra args appended to tofu init
+    - name: planExtraArgs
+      type: string
+      default: ""
+      description: extra args appended to tofu plan
+    - name: tofuLog
+      type: string
+      default: ""
+      description: TF_LOG level (TRACE/DEBUG/INFO/WARN/ERROR or empty)
+    - name: tofuWorkingImage
+      type: string
+      default: "ghcr.io/opentofu/opentofu:1.9.0"
+      description: the image opentofu runs on
+    - name: userHome
+      type: string
+      default: "/home/nonroot"
+      description: absolute path to the user's home directory
+    # ---- credentials ----
+    - name: vaultSecretName
+      type: string
+      default: "vault"
+      description: >-
+        Secret holding the Vault AppRole login material — keys VAULT_ADDR,
+        VAULT_ROLE_ID, VAULT_SECRET_ID (and optional VAULT_NAMESPACE).
+    - name: credentialsSecretName
+      type: string
+      default: "terraform-credentials"
+      description: optional Secret whose keys are exported as env for the tofu run
+  tasks:
+    - name: fetch-repository
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/tektoncd/catalog.git
+          # Pinned commit for supply-chain safety — same pin as
+          # execute-ansible-playbooks. Bump deliberately.
+          - name: revision
+            value: 7ea2968e224633b4967d60217b33bb4d38fa53d9 # pragma: allowlist secret (git commit SHA, not a secret)
+          - name: pathInRepo
+            value: task/git-clone/0.10/git-clone.yaml
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+        - name: ssh-directory
+          workspace: sshCredentials
+      params:
+        - name: deleteExisting
+          value: "true"
+        - name: revision
+          value: $(params.gitRevision)
+        - name: subdirectory
+          value: $(params.gitWorkspaceSubdirectory)
+        - name: url
+          value: $(params.gitRepoUrl)
+    - name: execute-tofu
+      runAfter:
+        - fetch-repository
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          # stage-time self-reference stays on main so local task edits
+          # propagate; bumped to a tag on release like the ansible pipeline.
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/execute-tofu.yaml
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: ACTION
+          value: $(params.tofuAction)
+        - name: SUB_DIRECTORY
+          value: $(params.subDirectory)
+        - name: AUTO_APPROVE
+          value: $(params.autoApprove)
+        - name: TF_VARS
+          value: $(params.tfVars[*])
+        - name: TF_VARS_FILE
+          value: $(params.tfVarsFile)
+        - name: BACKEND_CONFIG
+          value: $(params.backendConfig[*])
+        - name: INIT_EXTRA_ARGS
+          value: $(params.initExtraArgs)
+        - name: PLAN_EXTRA_ARGS
+          value: $(params.planExtraArgs)
+        - name: TF_LOG
+          value: $(params.tofuLog)
+        - name: WORKING_IMAGE
+          value: $(params.tofuWorkingImage)
+        - name: USER_HOME
+          value: $(params.userHome)
+        - name: vault-secret-name
+          value: $(params.vaultSecretName)
+        - name: credentials-secret-name
+          value: $(params.credentialsSecretName)
