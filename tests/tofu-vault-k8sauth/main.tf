@@ -11,8 +11,11 @@
 terraform {
   required_providers {
     vault = {
-      source  = "hashicorp/vault"
-      version = ">= 3.21.0"
+      source = "hashicorp/vault"
+      # Pinned to 3.x: auth_login_approle reads role_id/secret_id from the
+      # VAULT_ROLE_ID / VAULT_SECRET_ID env vars the execute-tofu task exports.
+      # v4/v5 reworked the auth blocks and reject auth_login_approle as written.
+      version = "~> 3.25"
     }
   }
 }
@@ -23,9 +26,9 @@ provider "vault" {
 
   # role_id / secret_id are read from VAULT_ROLE_ID / VAULT_SECRET_ID env,
   # which the task exports from the same Secret. Nothing sensitive in tfvars.
-  auth_login_approle {
-    mount = "approle"
-  }
+  # role_id / secret_id come from VAULT_ROLE_ID / VAULT_SECRET_ID (env),
+  # exported by the execute-tofu task from the vault Secret.
+  auth_login_approle {}
 }
 
 variable "mount_path" {
