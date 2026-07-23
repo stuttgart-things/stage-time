@@ -38,6 +38,11 @@ provider "vault" {
   # address from VAULT_ADDR (vault Secret, exported by the task)
   skip_tls_verify = true
 
+  # The provider otherwise mints a short-lived child token via
+  # auth/token/create for its operations — which the vault-k8sauth-bootstrap
+  # policy deliberately forbids. Use the AppRole login token directly instead.
+  skip_child_token = true
+
   auth_login {
     path = "auth/approle/login"
     parameters = {
