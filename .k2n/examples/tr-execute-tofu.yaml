@@ -16,7 +16,11 @@ spec:
       value: "terraform"
     - name: TF_VARS
       value:
-        - "region+-'eu-central-1'"
+        # String values must be DOUBLE-quoted in the value half — the tfvars line
+        # is HCL (region = "eu-central-1"), and HCL rejects single quotes. Wrap the
+        # whole item in YAML single quotes so the inner double quotes survive.
+        # Numbers need no quotes (instance_count = 2 is a valid HCL number).
+        - 'region+-"eu-central-1"'
         - "instance_count+-2"
     - name: BACKEND_CONFIG
       value:
