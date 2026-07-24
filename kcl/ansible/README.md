@@ -205,6 +205,7 @@ The following `data` keys are consumed (all optional):
 | `namespace`                  | Default Tekton namespace for the PipelineRun |
 | `ansibleExtraCollections`    | Default Ansible collections (JSON list) |
 | `ansibleCredentialsSecretName` | Default credentials Secret name |
+| `extraEnvSecretName`         | Default Secret injected as env vars into the playbook step |
 
 Precedence per field: explicit `oxr.spec` value → `EnvironmentConfig`
 value → flat `-D` option → hardcoded default. When no EnvironmentConfig

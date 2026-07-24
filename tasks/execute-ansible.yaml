@@ -113,6 +113,17 @@ spec:
       description: key for ansible password in the secret
       type: string
       default: "ANSIBLE_PASSWORD"
+    - name: extra-env-secret-name
+      description: >-
+        Name of an optional Secret whose keys are injected verbatim as
+        environment variables into the playbook step. Every key becomes an env
+        var of the same name, so playbooks reading `lookup('env', 'FOO')` work
+        without adding a param per variable (Tekton cannot render a variable
+        number of `env` entries from an array param). Missing secret => no env
+        vars, no failure. Keys must be valid env var names or the Pod is
+        rejected.
+      type: string
+      default: "ansible-extra-env"
   results:
     - name: playbooks-executed
       description: number of playbooks successfully executed
@@ -346,6 +357,15 @@ spec:
     - name: run-ansible-playbook
       args:
         - $(params.PLAYBOOKS[*])
+      # Bulk env injection for playbooks that read credentials from the
+      # environment (e.g. SOPS_AGE_KEY / SOPS_GIT_TOKEN in the machinery
+      # bootstrap). Kubernetes applies envFrom BEFORE env, so the explicitly
+      # named vars below always win on a key collision — a stray
+      # ANSIBLE_PASSWORD in this secret cannot shadow the credentials secret.
+      envFrom:
+        - secretRef:
+            name: $(params.extra-env-secret-name)
+            optional: true
       env:
         # Disabled so first-contact SSH to freshly-provisioned targets does
         # not block on an interactive host-key prompt. Trade-off: no MITM

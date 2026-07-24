@@ -36,7 +36,24 @@ oxr.spec.<field>  →  EnvironmentConfig (_env)  →  -D option  →  hardcoded 
 
 EnvironmentConfig provides shared *defaults* only (XR spec always wins) for:
 `gitRepoUrl`, `gitRevision`, `gitPath`, `storageClass`, `ansibleWorkingImage`,
-`namespace`, `ansibleExtraCollections`, `ansibleCredentialsSecretName`.
+`namespace`, `ansibleExtraCollections`, `ansibleCredentialsSecretName`,
+`extraEnvSecretName`.
+
+## Env injection (`extraEnvSecretName`)
+Names a Secret whose keys are injected verbatim as environment variables into
+the playbook step (`envFrom.secretRef`, `optional: true`) — for playbooks that
+read credentials via `lookup('env', ...)`, e.g. `SOPS_AGE_KEY` /
+`SOPS_GIT_TOKEN` in the machinery bootstrap.
+
+Deliberately one Secret *name*, not a list of `{envVar, secretName, key}`:
+**Tekton cannot render a variable number of `env` entries from an array
+param**, so a list would need a task param per variable. `envFrom` is applied
+by Kubernetes *before* `env`, so the explicitly named vars in the task
+(`ANSIBLE_PASSWORD`, `VAULT_*`) still win on a key collision.
+
+Empty by default and emitted into `_pipeline_params_override` **only when
+set** — Tekton rejects params a pipeline does not declare, so an unset value
+keeps XRs pinned to a pre-`v0.11.0` `pipelineRevision` renderable.
 
 ## Opt-in readiness
 `deriveReadiness` (default `false`): when true, the wrapped Object gets
