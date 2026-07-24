@@ -103,6 +103,13 @@ spec:
       type: string
       default: "ANSIBLE_PASSWORD"
       description: key for ansible password in the secret
+    - name: extraEnvSecretName
+      type: string
+      default: "ansible-extra-env"
+      description: >-
+        Optional Secret whose keys are injected as environment variables into
+        the playbook step (for playbooks reading `lookup('env', ...)`).
+        Missing secret => no env vars, no failure.
     # -------------------------------
     # SOPS decryption (runs after the git clone, before ansible)
     # -------------------------------
@@ -188,6 +195,8 @@ spec:
           value: $(params.ansibleCredentialsUserKey)
         - name: ansible-credentials-password-key
           value: $(params.ansibleCredentialsPasswordKey)
+        - name: extra-env-secret-name
+          value: $(params.extraEnvSecretName)
     - name: fetch-repository
       taskRef:
         resolver: git

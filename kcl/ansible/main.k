@@ -58,6 +58,17 @@ _ansibleVarsInventory = _flat_params?.ansibleVarsInventory or option("ansibleVar
 _ansibleVarsFile = _flat_params?.ansibleVarsFile or option("ansibleVarsFile") or []
 _ansibleCredentialsSecretName = _flat_params?.ansibleCredentialsSecretName or _env?.ansibleCredentialsSecretName or option("ansibleCredentialsSecretName") or "ansible-credentials"
 
+# Bulk env injection: every key of this Secret becomes an environment variable
+# in the playbook step, for playbooks that read credentials via
+# `lookup('env', ...)` (e.g. SOPS_AGE_KEY / SOPS_GIT_TOKEN in the machinery
+# bootstrap). Deliberately ONE secret name rather than a list of
+# {envVar, secretName, key}: Tekton cannot render a variable number of `env`
+# entries from an array param, so a list would need a param per variable.
+# Empty by default and only emitted when set — an unset value keeps the
+# rendered params byte-identical to today, so pipeline revisions that predate
+# this param (Tekton rejects params a pipeline does not declare) still work.
+_extraEnvSecretName = _flat_params?.extraEnvSecretName or _env?.extraEnvSecretName or option("extraEnvSecretName") or ""
+
 # Previously these only resolved from `-D` options via values.k, so setting
 # them in an XR spec (composition mode) was silently ignored. Extract them
 # here so `oxr.spec.<field>` is honoured, same precedence as the fields above.
@@ -176,6 +187,9 @@ _pipeline_params_override = {
     validateInventory = _validateInventory
     gitRepoUrl = _gitRepoUrl
     gitRevision = _gitRevision
+    # Only emitted when set, so older pipeline revisions stay renderable.
+    if _extraEnvSecretName:
+        extraEnvSecretName = _extraEnvSecretName
     # Only emit sops params when enabled — keeps the from-collections pipeline
     # (which doesn't declare them) unaffected; the clone pipeline defaults them.
     if _decryptSops == "true":
