@@ -26,6 +26,7 @@ _storageSize = _flat_params?.storageSize or option("storageSize") or "20Mi"
 _storageAccessModes = _flat_params?.storageAccessModes or option("storageAccessModes") or "ReadWriteOnce"
 _storageClass = _flat_params?.storageClass or _env?.storageClass or option("storageClass") or "openebs-hostpath"
 _namespace = _flat_params?.namespace or _env?.namespace or option("namespace") or "tekton-ci"
+
 # --- Deliberate re-run knob (crossplane-configurations#164) ---
 # A Tekton PipelineRun is one-shot, and the Object below drops Update from its
 # managementPolicies, so editing a completed run's spec is a SILENT no-op: the
@@ -108,6 +109,7 @@ _validateInventory = _flat_params?.validateInventory or option("validateInventor
 assert _ansibleWorkingImage.startswith("ghcr.io/") or _ansibleWorkingImage.startswith("docker.io/") or _ansibleWorkingImage.startswith("quay.io/"), "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
 assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a valid GitHub HTTPS URL"
 assert len(_gitRevision) > 0, "gitRevision cannot be empty"
+
 # runID lands inside a Kubernetes object name, so it has to be a DNS-1123 label
 # fragment. Rejected here rather than in the API server, where the failure would
 # surface as an opaque name-validation error on a composed resource.

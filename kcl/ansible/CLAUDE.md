@@ -67,13 +67,13 @@ The readiness policy lives in the Crossplane `Object` wrapper (`main.k`,
 is true. With `wrapInCrossplane` false (a bare `PipelineRun`), setting
 `deriveReadiness:true` is a silent no-op.
 
-## Deliberate re-runs (`runID`, since 0.15.0)
+## Deliberate re-runs (`runID`, since 0.15.1)
 A Tekton `PipelineRun` is one-shot, and the wrapped Object drops `Update` from
 its `managementPolicies` (see "Notes / limitations"). So editing a completed
 run's spec is a **silent no-op**: the XR and the Object carry the new spec while
 Tekton keeps the old one, and nothing reports `Synced=False`.
 
-`runID` (optional string) is the supported way to actually re-run. It is
+`runID` (optional string, since 0.15.1) is the supported way to actually re-run. It is
 suffixed onto **both** derived names:
 
 | input | `pipelineRunName` | Object name |
@@ -84,7 +84,7 @@ suffixed onto **both** derived names:
 
 Renaming the Object is the part that does the work — provider-kubernetes only
 creates a new `PipelineRun` for a *new* Object, since the existing one is
-Observe/Create-only. Unset `runID` reproduces pre-0.15.0 names exactly.
+Observe/Create-only. Unset `runID` reproduces the previous names exactly.
 
 It is deliberately **not** a hash of the spec: hashing would make an innocuous
 edit (a collection pin, an extra var) silently re-execute a play against a live
