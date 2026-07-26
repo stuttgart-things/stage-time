@@ -3,6 +3,7 @@ import tekton_pipelines.v1 as tekton
 import .vars
 import datetime
 import crypto
+import regex
 
 # --- Read parameters (supports both Composition format and flat format) ---
 _params = option("params") or {}
@@ -25,7 +26,22 @@ _storageSize = _flat_params?.storageSize or option("storageSize") or "20Mi"
 _storageAccessModes = _flat_params?.storageAccessModes or option("storageAccessModes") or "ReadWriteOnce"
 _storageClass = _flat_params?.storageClass or _env?.storageClass or option("storageClass") or "openebs-hostpath"
 _namespace = _flat_params?.namespace or _env?.namespace or option("namespace") or "tekton-ci"
-_pipelineRunName = _flat_params?.pipelineRunName or option("pipelineRunName") or None
+# --- Deliberate re-run knob (crossplane-configurations#164) ---
+# A Tekton PipelineRun is one-shot, and the Object below drops Update from its
+# managementPolicies, so editing a completed run's spec is a SILENT no-op: the
+# XR and the Object carry the new spec while Tekton keeps running the old one,
+# and nothing reports Synced=False. runID is the supported way to actually
+# re-run — it is suffixed onto BOTH derived names, so bumping it produces a
+# genuinely new PipelineRun and a new Object.
+#
+# Deliberately NOT a hash of the spec: hashing would make an innocuous edit (a
+# collection pin, an extra var) silently re-execute a play against a live
+# machine. Re-running has to be an explicit act.
+_runID = str(_flat_params?.runID or option("runID") or "")
+_runSuffix = "-{}".format(_runID) if _runID else ""
+
+_pipelineRunNameBase = _flat_params?.pipelineRunName or option("pipelineRunName") or None
+_pipelineRunName = "{}{}".format(_pipelineRunNameBase, _runSuffix) if _pipelineRunNameBase else None
 
 # Ansible CONTENT source (what fetch-repository clones for the execute-ansible-
 # playbooks pipeline). This is the user's playbook repo/revision.
@@ -92,6 +108,10 @@ _validateInventory = _flat_params?.validateInventory or option("validateInventor
 assert _ansibleWorkingImage.startswith("ghcr.io/") or _ansibleWorkingImage.startswith("docker.io/") or _ansibleWorkingImage.startswith("quay.io/"), "ansibleWorkingImage must be from ghcr.io, docker.io, or quay.io"
 assert _gitRepoUrl.startswith("https://github.com/"), "gitRepoUrl must be a valid GitHub HTTPS URL"
 assert len(_gitRevision) > 0, "gitRevision cannot be empty"
+# runID lands inside a Kubernetes object name, so it has to be a DNS-1123 label
+# fragment. Rejected here rather than in the API server, where the failure would
+# surface as an opaque name-validation error on a composed resource.
+assert _runID == "" or regex.match(_runID, r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"), "runID must be lowercase alphanumeric or '-', starting and ending alphanumeric (it is suffixed onto the PipelineRun and Object names)"
 # Storage validation (moved from the former vars.k schema.StorageConfig).
 assert _storageSize.endswith("Mi") or _storageSize.endswith("Gi"), "storageSize must end with 'Mi' or 'Gi'"
 assert _storageAccessModes in ["ReadWriteOnce", "ReadWriteMany", "ReadOnlyMany"], "storageAccessModes must be ReadWriteOnce, ReadWriteMany, or ReadOnlyMany"
@@ -124,8 +144,14 @@ _wrapInCrossplane = _flat_params?.wrapInCrossplane or option("wrapInCrossplane")
 # default changes nothing for existing runs, and it makes the claim already
 # printed in cicd/ansible-run/examples/xr-min.yaml true. An Object and a
 # PipelineRun are different kinds, so sharing a name costs nothing.
+# The default inherits runID through _pipelineRunName (already suffixed above);
+# an EXPLICIT object name gets the suffix applied here, so bumping runID renames
+# both regardless of which path supplied the name. Renaming the Object is the
+# part that matters: provider-kubernetes only creates a new PipelineRun when it
+# is a new Object, since the old one is Observe/Create-only.
 _defaultObjectName = _pipelineRunName if _pipelineRunName else "tekton-pipeline-run"
-_crossplaneObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or _defaultObjectName
+_explicitObjectName = _flat_params?.crossplaneObjectName or option("crossplaneObjectName") or ""
+_crossplaneObjectName = "{}{}".format(_explicitObjectName, _runSuffix) if _explicitObjectName else _defaultObjectName
 _crossplaneNamespace = _flat_params?.crossplaneNamespace or option("crossplaneNamespace") or "default"
 _crossplaneProviderConfig = _flat_params?.crossplaneProviderConfig or option("crossplaneProviderConfig") or "kubernetes-provider"
 _crossplaneTimeout = _flat_params?.crossplaneTimeout or option("crossplaneTimeout") or "60"
