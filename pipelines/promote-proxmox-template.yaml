@@ -116,7 +116,7 @@ spec:
           # an unpinned default silently changes what runs. Bump alongside the
           # task. Must be a tag that CONTAINS tasks/promote-config-pr.yaml.
           - name: revision
-            value: v0.13.0
+            value: v0.13.1
           - name: pathInRepo
             value: tasks/promote-config-pr.yaml
       workspaces:
