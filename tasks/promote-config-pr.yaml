@@ -1,0 +1,415 @@
+---
+# Set one value in a config repo and open a pull request for it.
+#
+# This is the promotion mechanism for anything whose consumers resolve a
+# reference out of GitOps config rather than out of an inventory. Proxmox is the
+# case that forced it: `bpg`'s VirtualMachine clones by numeric VMID only --
+# spec.forProvider.clone takes vmId and nothing else, no name, path, ref or
+# selector -- so the vSphere promotion model (rename the golden image aside, the
+# new one in) would rename objects and reach no consumer at all. What consumers
+# actually read is `templateVmId` in the proxmoxvm capability chart. Promoting
+# therefore means changing that number, and the honest way to change a number
+# that lives in git is a commit, not a cluster-side patch.
+#
+# Deliberately generic. It takes a file, a yq path and a value; it does not know
+# what a template is. The vSphere `templateUuid` pins have the same silent-drift
+# problem (see the check-template-pins task in stuttgart-things), and this task
+# is meant to serve them next without changes.
+#
+# WHY A PULL REQUEST, not a direct push:
+#   * one writer. Patching the EnvironmentConfig on the cluster instead would
+#     give it two -- the Helm chart and this -- and the next `helm upgrade`
+#     would silently revert the promotion.
+#   * a fleet-wide image switch gets a human diff before it takes effect. The
+#     PR is the gate; merging is the promotion.
+#   * it is auditable after the fact, which a cluster-side patch is not.
+#
+# IDEMPOTENT. If the file already carries the target value the task makes no
+# branch, opens no PR and succeeds -- results still report the value, with
+# previous-value equal to it. That matters because a PackerRelease may reconcile
+# repeatedly, and a promotion that spammed a PR per reconcile would be worse
+# than no automation.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: promote-config-pr
+spec:
+  description: >-
+    Clone a config repo, set one YAML value, optionally bump a chart version,
+    push a branch and open a pull request. Idempotent: an already-correct value
+    is a no-op.
+  workspaces:
+    - name: ca-certs
+      optional: true
+      description: >-
+        private CA bundle, for a self-hosted forge. Not needed for github.com.
+  params:
+    - name: CONFIG_REPO_URL
+      type: string
+      description: >-
+        https clone URL of the repo holding the value, e.g.
+        https://github.com/stuttgart-things/stuttgart-things.git
+    - name: BASE_BRANCH
+      type: string
+      default: "main"
+      description: branch the pull request targets, and the branch point
+    - name: VALUES_FILE
+      type: string
+      description: >-
+        repo-relative path to the YAML file, e.g.
+        crossplane/platform/capabilities/proxmoxvm/values.yaml
+    - name: VALUE_PATH
+      type: string
+      description: >-
+        yq path expression to set, e.g. .environments.labul.templateVmId
+        NOTE the value is written as a STRING (yq `= "..."`). templateVmId is
+        quoted in the chart and must stay quoted -- an unquoted 211 becomes an
+        int and renders differently.
+    - name: NEW_VALUE
+      type: string
+      description: the value to set, e.g. a freshly built Proxmox VMID
+    - name: CHART_FILE
+      type: string
+      default: ""
+      description: >-
+        optional Chart.yaml whose .version gets a patch bump, so the chart is
+        actually republished. Empty skips the bump -- but then a merged PR
+        changes nothing that any cluster pulls.
+    - name: BRANCH_PREFIX
+      type: string
+      default: "promote/"
+      description: >-
+        branch name is <prefix><sanitized value-path>-<new value>, which is
+        deterministic on purpose: a re-run for the same promotion finds its own
+        branch and reuses the open PR instead of opening a second one.
+    - name: PR_TITLE
+      type: string
+      default: ""
+      description: defaults to a generated one-liner naming the path and value
+    - name: PR_BODY
+      type: string
+      default: ""
+      description: appended below the generated summary
+    - name: GIT_USER_NAME
+      type: string
+      default: "stuttgart-things"
+    - name: GIT_USER_EMAIL
+      type: string
+      default: "noreply@stuttgart-things.com"
+    - name: API_BASE
+      type: string
+      default: "https://api.github.com"
+      description: forge REST base; override for GitHub Enterprise
+    - name: git-token-secret-name
+      type: string
+      default: "config-repo-pr-token"
+      description: >-
+        Secret holding a token that may push a branch and open a pull request on
+        CONFIG_REPO_URL. It needs write; the read-only clone credential used by
+        the build pipelines is NOT sufficient.
+    - name: git-token-secret-key
+      type: string
+      default: "token"
+    - name: DRY_RUN
+      type: string
+      default: "false"
+      description: >-
+        do everything except push and open the PR. The diff is printed. Use it
+        to prove the yq path matches before letting it near the repo.
+    - name: WORKING_IMAGE
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
+      description: needs git, yq (mikefarah v4), curl and jq
+    - name: USER_HOME
+      type: string
+      default: "/home/nonroot"
+  results:
+    - name: new-value
+      description: the value now in the file on the PR branch
+    - name: previous-value
+      description: >-
+        what the file held before, i.e. the rollback target. Equal to new-value
+        when the task was a no-op.
+    - name: pull-request-url
+      description: >-
+        the pull request, or empty when nothing had to change (or on DRY_RUN)
+    - name: changed
+      description: '"true" when a PR was opened or updated, "false" on a no-op'
+  steps:
+    - name: open-pr
+      image: "$(params.WORKING_IMAGE)"
+      workingDir: /tmp
+      env:
+        - name: HOME
+          value: $(params.USER_HOME)
+        - name: SSL_CERT_FILE
+          value: /tmp/.tekton-ca-bundle.crt
+        - name: GIT_SSL_CAINFO
+          value: /tmp/.tekton-ca-bundle.crt
+        - name: CA_CERTS_BOUND
+          value: $(workspaces.ca-certs.bound)
+        - name: CA_CERTS_PATH
+          value: $(workspaces.ca-certs.path)
+        - name: CONFIG_REPO_URL
+          value: $(params.CONFIG_REPO_URL)
+        - name: BASE_BRANCH
+          value: $(params.BASE_BRANCH)
+        - name: VALUES_FILE
+          value: $(params.VALUES_FILE)
+        - name: VALUE_PATH
+          value: $(params.VALUE_PATH)
+        - name: NEW_VALUE
+          value: $(params.NEW_VALUE)
+        - name: CHART_FILE
+          value: $(params.CHART_FILE)
+        - name: BRANCH_PREFIX
+          value: $(params.BRANCH_PREFIX)
+        - name: PR_TITLE
+          value: $(params.PR_TITLE)
+        - name: PR_BODY
+          value: $(params.PR_BODY)
+        - name: GIT_USER_NAME
+          value: $(params.GIT_USER_NAME)
+        - name: GIT_USER_EMAIL
+          value: $(params.GIT_USER_EMAIL)
+        - name: API_BASE
+          value: $(params.API_BASE)
+        - name: DRY_RUN
+          value: $(params.DRY_RUN)
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: $(params.git-token-secret-key)
+              name: $(params.git-token-secret-name)
+              optional: true
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        # Declare results up front so Tekton never warns about unset ones and a
+        # early exit still reports something readable.
+        printf '' > "$(results.pull-request-url.path)"
+        printf 'false' > "$(results.changed.path)"
+        printf '%s' "${NEW_VALUE}" > "$(results.new-value.path)"
+        printf '' > "$(results.previous-value.path)"
+
+        # Same per-run CA trust the other tasks use. github.com validates
+        # against the system roots, so this only matters for a private forge.
+        BUNDLE="${SSL_CERT_FILE}"
+        : > "${BUNDLE}"
+        [ -f /etc/ssl/certs/ca-certificates.crt ] && cat /etc/ssl/certs/ca-certificates.crt >> "${BUNDLE}"
+        if [ "${CA_CERTS_BOUND}" = "true" ]; then
+          for crt in "${CA_CERTS_PATH}"/*.crt "${CA_CERTS_PATH}"/*.pem; do
+            [ -f "${crt}" ] || continue
+            printf '\n' >> "${BUNDLE}"; cat "${crt}" >> "${BUNDLE}"
+          done
+        fi
+
+        if [ -z "${GIT_TOKEN:-}" ] && [ "${DRY_RUN}" != "true" ]; then
+          echo "no token in secret $(params.git-token-secret-name) key $(params.git-token-secret-key)" >&2
+          echo "promotion needs push + pull-request rights on ${CONFIG_REPO_URL};" >&2
+          echo "the read-only clone credential the build pipelines use is not enough." >&2
+          exit 1
+        fi
+
+        # owner/repo out of the clone URL, for the REST calls.
+        SLUG="${CONFIG_REPO_URL#*github.com/}"; SLUG="${SLUG#*://}"; SLUG="${SLUG%.git}"
+        echo "repo: ${SLUG}   base: ${BASE_BRANCH}"
+
+        # Credential via the store helper in a 0600 file. Not in the remote URL
+        # and not in argv: both end up in `git remote -v`, in error messages and
+        # in the process table.
+        umask 077
+        if [ -n "${GIT_TOKEN:-}" ]; then
+          printf 'https://x-access-token:%s@github.com\n' "${GIT_TOKEN}" > "${HOME}/.git-credentials"
+          git config --global credential.helper store
+        fi
+        git config --global user.name "${GIT_USER_NAME}"
+        git config --global user.email "${GIT_USER_EMAIL}"
+        git config --global advice.detachedHead false
+
+        # Set ONE scalar, touching ONE line.
+        #
+        # `yq eval -i` is the obvious tool and the wrong one: it reserialises the
+        # whole document. Measured on the proxmoxvm chart it dropped 7 blank
+        # lines (206 -> 199) and reflowed the folded `description` in Chart.yaml
+        # into a single line. Comments survive, structure does not -- and a
+        # promotion whose diff rewrites half the file is a diff nobody reviews,
+        # which defeats the point of routing this through a pull request.
+        #
+        # So yq is used only to LOCATE. Note its `line` returns the start of the
+        # node including any head comment block (187 where the value sits on
+        # 193), hence the forward scan for the leaf key.
+        set_yaml_scalar() {
+          local file="$1" path="$2" value="$3"
+          local leaf start line
+          leaf="${path##*.}"
+          start=$(yq eval "${path} | line" "${file}")
+          if [ -z "${start}" ] || [ "${start}" = "0" ]; then
+            echo "could not locate ${path} in ${file}" >&2; return 1
+          fi
+          line=$(awk -v s="${start}" -v k="${leaf}" \
+                   'NR>=s && $0 ~ "^[[:space:]]*" k ":" {print NR; exit}' "${file}")
+          if [ -z "${line}" ]; then
+            echo "located ${path} at line ${start} but found no '${leaf}:' at or after it" >&2
+            return 1
+          fi
+          awk -v ln="${line}" -v newv="${value}" '
+            NR==ln {
+              if (match($0, /^[[:space:]]*[^:]+:[[:space:]]*/)) {
+                prefix = substr($0, 1, RLENGTH)
+                rest   = substr($0, RLENGTH+1)
+                cmt = ""
+                # keep a trailing line comment, e.g. `pool: x  # why`
+                if (match(rest, /[[:space:]]+#.*$/)) {
+                  cmt  = substr(rest, RSTART)
+                  rest = substr(rest, 1, RSTART-1)
+                }
+                # keep the existing quoting style: templateVmId is quoted in the
+                # chart and must stay quoted, or it renders as an int
+                q = ""
+                if (rest ~ /^".*"$/) q = "\""
+                else if (rest ~ /^'"'"'.*'"'"'$/) q = "'"'"'"
+                print prefix q newv q cmt
+                next
+              }
+            }
+            { print }
+          ' "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+        }
+
+        rm -rf /tmp/config-repo
+        git clone --quiet --depth 1 --branch "${BASE_BRANCH}" "${CONFIG_REPO_URL}" /tmp/config-repo
+        cd /tmp/config-repo
+
+        if [ ! -f "${VALUES_FILE}" ]; then
+          echo "VALUES_FILE not found in the repo: ${VALUES_FILE}" >&2
+          exit 1
+        fi
+
+        # Read the current value FIRST -- it is the rollback target, and it is
+        # what tells us whether there is anything to do at all.
+        PREVIOUS=$(yq eval "${VALUE_PATH}" "${VALUES_FILE}")
+        if [ "${PREVIOUS}" = "null" ]; then
+          echo "VALUE_PATH matched nothing in ${VALUES_FILE}: ${VALUE_PATH}" >&2
+          echo "refusing to create the key -- a typo would add a field nobody reads" >&2
+          exit 1
+        fi
+        printf '%s' "${PREVIOUS}" > "$(results.previous-value.path)"
+        echo "${VALUE_PATH}: ${PREVIOUS} -> ${NEW_VALUE}"
+
+        if [ "${PREVIOUS}" = "${NEW_VALUE}" ]; then
+          echo "already promoted -- no branch, no pull request"
+          exit 0
+        fi
+
+        # Deterministic branch name, so a re-run lands on its own branch and
+        # updates the existing PR instead of opening a second one for the same
+        # promotion.
+        SAFE_PATH=$(printf '%s' "${VALUE_PATH}" | tr -c 'A-Za-z0-9' '-' | tr -s '-' | sed 's/^-//; s/-$//')
+        BRANCH="${BRANCH_PREFIX}${SAFE_PATH}-${NEW_VALUE}"
+        git checkout -q -b "${BRANCH}"
+
+        set_yaml_scalar "${VALUES_FILE}" "${VALUE_PATH}" "${NEW_VALUE}"
+
+        CHART_NOTE="none"
+        if [ -n "${CHART_FILE}" ]; then
+          if [ ! -f "${CHART_FILE}" ]; then
+            echo "CHART_FILE not found: ${CHART_FILE}" >&2
+            exit 1
+          fi
+          OLD_V=$(yq eval '.version' "${CHART_FILE}")
+          # Patch bump. A promotion changes a default value, not the schema.
+          NEW_V=$(printf '%s' "${OLD_V}" | awk -F. '{printf "%s.%s.%d", $1, $2, $3+1}')
+          set_yaml_scalar "${CHART_FILE}" ".version" "${NEW_V}"
+          CHART_NOTE="${OLD_V} -> ${NEW_V}"
+          echo "chart version: ${CHART_NOTE}"
+        fi
+
+        echo "=========================================="
+        echo "DIFF"
+        echo "=========================================="
+        git --no-pager diff
+
+        if [ -z "$(git status --porcelain)" ]; then
+          echo "yq produced no change -- treating as already promoted"
+          exit 0
+        fi
+
+        TITLE="${PR_TITLE}"
+        [ -z "${TITLE}" ] && TITLE="promote: ${VALUE_PATH} -> ${NEW_VALUE}"
+
+        BODY=$(printf '%s\n' \
+          "Automated promotion from a PackerRelease." \
+          "" \
+          "| | |" \
+          "|---|---|" \
+          "| file | \`${VALUES_FILE}\` |" \
+          "| path | \`${VALUE_PATH}\` |" \
+          "| from | \`${PREVIOUS}\` |" \
+          "| to | \`${NEW_VALUE}\` |" \
+          "| chart version | ${CHART_NOTE} |" \
+          "" \
+          "Merging this IS the promotion: consumers resolve the value from this file via the capability chart, so nothing changes until it lands and the chart is rolled out." \
+          "" \
+          "Rollback is putting \`${PREVIOUS}\` back." \
+          "" \
+          "${PR_BODY}")
+
+        git add -A
+        git commit -q -m "${TITLE}" -m "${BODY}"
+
+        if [ "${DRY_RUN}" = "true" ]; then
+          echo "DRY_RUN -- not pushing, not opening a pull request"
+          printf 'false' > "$(results.changed.path)"
+          exit 0
+        fi
+
+        git push -q --force-with-lease origin "${BRANCH}"
+        echo "pushed ${BRANCH}"
+
+        # curl reads the auth header from stdin (-K -) so the token never
+        # reaches argv. Reused for every call below.
+        api() {
+          local method="$1" path="$2" data="${3:-}"
+          if [ -n "${data}" ]; then
+            printf 'header = "Authorization: Bearer %s"\n' "${GIT_TOKEN}" \
+              | curl -sS --max-time 30 -K - \
+                  -X "${method}" \
+                  -H "Accept: application/vnd.github+json" \
+                  -H "Content-Type: application/json" \
+                  --data "${data}" \
+                  "${API_BASE}/${path}"
+          else
+            printf 'header = "Authorization: Bearer %s"\n' "${GIT_TOKEN}" \
+              | curl -sS --max-time 30 -K - \
+                  -X "${method}" \
+                  -H "Accept: application/vnd.github+json" \
+                  "${API_BASE}/${path}"
+          fi
+        }
+
+        # Reuse an open PR for this branch rather than failing on the 422 that
+        # a second create would return.
+        EXISTING=$(api GET "repos/${SLUG}/pulls?state=open&head=${SLUG%%/*}:${BRANCH}" \
+                    | jq -r '.[0].html_url // empty')
+
+        if [ -n "${EXISTING}" ]; then
+          PR_URL="${EXISTING}"
+          echo "pull request already open, reused: ${PR_URL}"
+        else
+          PAYLOAD=$(jq -n --arg t "${TITLE}" --arg b "${BODY}" \
+                          --arg h "${BRANCH}" --arg base "${BASE_BRANCH}" \
+                          '{title:$t, body:$b, head:$h, base:$base}')
+          RESPONSE=$(api POST "repos/${SLUG}/pulls" "${PAYLOAD}")
+          PR_URL=$(printf '%s' "${RESPONSE}" | jq -r '.html_url // empty')
+          if [ -z "${PR_URL}" ]; then
+            # .message/.errors are the forge's own text and carry no credential.
+            echo "opening the pull request failed: $(printf '%s' "${RESPONSE}" | jq -rc '{message, errors}')" >&2
+            exit 1
+          fi
+          echo "opened ${PR_URL}"
+        fi
+
+        printf '%s' "${PR_URL}" > "$(results.pull-request-url.path)"
+        printf 'true' > "$(results.changed.path)"
