@@ -365,6 +365,22 @@ spec:
           exit 0
         fi
 
+        # Fetch the branch into its remote-tracking ref BEFORE pushing.
+        #
+        # --force-with-lease compares what we believe origin/<branch> to be
+        # against what it actually is, and refuses when we have no belief at
+        # all. A --depth 1 clone of the base branch has never heard of this one,
+        # so on a re-run -- when the branch DOES exist remotely -- the push dies
+        # with "stale info" and the whole promotion fails. The first run passes
+        # because there is nothing to overwrite, which is exactly why this hid
+        # until the second one.
+        #
+        # `|| true`: on a first promotion the ref does not exist remotely and
+        # the fetch is expected to fail. The lease is then vacuous, correctly so
+        # -- there is nothing to clobber.
+        git fetch --quiet --depth 1 origin \
+          "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
+
         git push -q --force-with-lease origin "${BRANCH}"
         echo "pushed ${BRANCH}"
 
