@@ -1,0 +1,151 @@
+---
+# Promote a freshly built Proxmox template to the golden image.
+#
+# The Proxmox sibling of promote-packer-template.yaml, and deliberately NOT a
+# copy of it. On vSphere, promotion renames the golden image aside and the new
+# one in, and that works because consumers resolve templates by inventory
+# name/path -- the rename redirects them.
+#
+# Nothing resolves by name on Proxmox. `bpg`'s VirtualMachine exposes
+# spec.forProvider.clone with `vmId` and nothing else: no name, no path, no ref,
+# no selector. What every consumer actually reads is `templateVmId` in the
+# proxmoxvm capability chart, which the Composition turns into an
+# EnvironmentConfig. A rename in PVE would therefore change what a human sees in
+# the UI and redirect exactly zero clones.
+#
+# So promotion here is a config change, and the config lives in git. This
+# pipeline opens the pull request that makes the new VMID the default; merging
+# it (and the chart rollout that follows) IS the promotion. See issue #205,
+# whose "open questions" section asks precisely this -- name or VMID -- and
+# crossplane-configurations' proxmoxvm capability chart for the consumer side.
+#
+# Consequences of that model, all of them simplifications:
+#   * rollback is putting the previous VMID back, not renaming inventory
+#   * the "exactly one previous generation" bookkeeping vSphere needs disappears
+#   * there is no PVE API call at all, hence no node access and no API token
+#     here -- which is just as well, since node SSH is unavailable in LabUL
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: promote-proxmox-template
+spec:
+  workspaces:
+    - name: caCerts
+      optional: true
+  params:
+    - name: templateName
+      type: string
+      description: >-
+        the freshly built template to promote. On Proxmox this is the VMID --
+        the `template-name` result of build-packer-template is the numeric id
+        packer reports ("A template was created: 211"), not a name.
+    - name: configRepoUrl
+      type: string
+      default: "https://github.com/stuttgart-things/stuttgart-things.git"
+      description: repo holding the capability chart consumers resolve through
+    - name: configRepoBranch
+      type: string
+      default: "main"
+    - name: valuesFile
+      type: string
+      default: "crossplane/platform/capabilities/proxmoxvm/values.yaml"
+    - name: valuePath
+      type: string
+      description: >-
+        yq path of the golden pointer for this environment, e.g.
+        .environments.labul.templateVmId
+    - name: chartFile
+      type: string
+      default: "crossplane/platform/capabilities/proxmoxvm/Chart.yaml"
+      description: >-
+        bumped so the chart is actually republished. Without it a merged PR
+        changes a file no cluster ever pulls.
+    - name: prTitle
+      type: string
+      default: ""
+    - name: prBody
+      type: string
+      default: ""
+    - name: gitTokenSecretName
+      type: string
+      default: "config-repo-pr-token"
+      description: >-
+        needs push + pull-request rights on configRepoUrl. The read-only clone
+        credential the build pipelines use is NOT sufficient.
+    - name: gitTokenSecretKey
+      type: string
+      default: "token"
+    - name: dryRun
+      type: string
+      default: "false"
+    - name: userHome
+      type: string
+      default: "/home/nonroot"
+    - name: workingImage
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
+      description: needs git, yq, curl and jq -- all present since 2.0.0
+  results:
+    # Same result NAMES the vSphere promote pipeline emits, so the PackerRelease
+    # derive-status step reads both without a branch. The values mean VMIDs here
+    # rather than inventory paths.
+    - name: promoted-template
+      description: the VMID the golden pointer now names on the PR branch
+      value: $(tasks.promote.results.new-value)
+    - name: previous-template
+      description: >-
+        the VMID it named before, i.e. the rollback target. Equal to
+        promoted-template when the pointer was already correct.
+      value: $(tasks.promote.results.previous-value)
+    - name: pull-request-url
+      description: >-
+        the pull request that carries the promotion, or empty when nothing had
+        to change. Until it is merged the fleet still clones the old VMID.
+      value: $(tasks.promote.results.pull-request-url)
+    - name: changed
+      description: '"true" when a pull request was opened or updated'
+      value: $(tasks.promote.results.changed)
+  tasks:
+    - name: promote
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          # Pinned tag, not "main": the git resolver fetches at render time, so
+          # an unpinned default silently changes what runs. Bump alongside the
+          # task. Must be a tag that CONTAINS tasks/promote-config-pr.yaml.
+          - name: revision
+            value: v0.13.0
+          - name: pathInRepo
+            value: tasks/promote-config-pr.yaml
+      workspaces:
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: CONFIG_REPO_URL
+          value: $(params.configRepoUrl)
+        - name: BASE_BRANCH
+          value: $(params.configRepoBranch)
+        - name: VALUES_FILE
+          value: $(params.valuesFile)
+        - name: VALUE_PATH
+          value: $(params.valuePath)
+        - name: NEW_VALUE
+          value: $(params.templateName)
+        - name: CHART_FILE
+          value: $(params.chartFile)
+        - name: PR_TITLE
+          value: $(params.prTitle)
+        - name: PR_BODY
+          value: $(params.prBody)
+        - name: git-token-secret-name
+          value: $(params.gitTokenSecretName)
+        - name: git-token-secret-key
+          value: $(params.gitTokenSecretKey)
+        - name: DRY_RUN
+          value: $(params.dryRun)
+        - name: USER_HOME
+          value: $(params.userHome)
+        - name: WORKING_IMAGE
+          value: $(params.workingImage)
