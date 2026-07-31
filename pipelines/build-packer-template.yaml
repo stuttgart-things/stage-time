@@ -137,8 +137,9 @@ spec:
         params:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
+          # TEST PIN -- must be a released tag before this merges.
           - name: revision
-            value: v0.9.0
+            value: feat/packer-approle-login
           - name: pathInRepo
             value: tasks/execute-packer.yaml
       workspaces:
