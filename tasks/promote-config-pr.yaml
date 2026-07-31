@@ -365,23 +365,34 @@ spec:
           exit 0
         fi
 
-        # Fetch the branch into its remote-tracking ref BEFORE pushing.
+        # Push, keeping the lease EXPLICIT.
         #
-        # --force-with-lease compares what we believe origin/<branch> to be
-        # against what it actually is, and refuses when we have no belief at
-        # all. A --depth 1 clone of the base branch has never heard of this one,
-        # so on a re-run -- when the branch DOES exist remotely -- the push dies
-        # with "stale info" and the whole promotion fails. The first run passes
-        # because there is nothing to overwrite, which is exactly why this hid
-        # until the second one.
+        # Bare `--force-with-lease` does not work here. It compares what we
+        # believe origin/<branch> to be against what it actually is, and refuses
+        # when we have no belief at all -- and a --depth 1 clone of the base
+        # branch carries a remote-tracking ref for that branch only, never for
+        # this one. So from the second promotion onward, when the branch does
+        # exist remotely, the push dies with:
         #
-        # `|| true`: on a first promotion the ref does not exist remotely and
-        # the fetch is expected to fail. The lease is then vacuous, correctly so
-        # -- there is nothing to clobber.
-        git fetch --quiet --depth 1 origin \
-          "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
-
-        git push -q --force-with-lease origin "${BRANCH}"
+        #   ! [rejected]  promote/... (stale info)
+        #
+        # The first run passes because there is nothing to overwrite, which is
+        # exactly why this hides until the re-run -- the very path the
+        # deterministic branch name exists to serve. Fetching the ref first was
+        # the obvious fix and was NOT enough; the lease still resolved against a
+        # tracking ref this shallow clone does not properly maintain.
+        #
+        # ls-remote asks the remote directly, so it does not depend on clone
+        # depth or tracking refs at all. Handing that sha to the lease keeps the
+        # protection meaningful -- the push still refuses if someone moved the
+        # branch between this query and the push -- while actually working.
+        REMOTE_SHA=$(git ls-remote --heads origin "${BRANCH}" | awk '{print $1}')
+        if [ -n "${REMOTE_SHA}" ]; then
+          echo "branch exists remotely at ${REMOTE_SHA}, updating it"
+          git push -q --force-with-lease="${BRANCH}:${REMOTE_SHA}" origin "${BRANCH}"
+        else
+          git push -q origin "${BRANCH}"
+        fi
         echo "pushed ${BRANCH}"
 
         # curl reads the auth header from stdin (-K -) so the token never
