@@ -111,6 +111,13 @@ spec:
       description: name of the vault secret
       type: string
       default: "vault"
+    - name: vault-approle-auth-path
+      description: >-
+        auth mount path used for the AppRole login that runs when the vault
+        secret carries no VAULT_TOKEN. Vault allows the approle backend to be
+        mounted under any name, so this is a parameter rather than a constant.
+      type: string
+      default: "approle"
   results:
     - name: action-performed
       description: the packer action that was executed
@@ -280,6 +287,8 @@ spec:
               key: $(params.vault-secret-key-token)
               name: $(params.vault-secret-name)
               optional: true
+        - name: VAULT_APPROLE_PATH
+          value: $(params.vault-approle-auth-path)
       envFrom:
         - secretRef:
             name: $(params.credentials-secret-name)
@@ -295,6 +304,88 @@ spec:
         # results; the build branch overwrites template-name on success.
         printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
         printf '' > "$(results.template-name.path)"
+
+        # AppRole login, when the vault secret carries no VAULT_TOKEN.
+        #
+        # packer's vault() template function builds a client from VAULT_ADDR +
+        # VAULT_TOKEN and never logs in itself, so a Vault that only hands out
+        # an AppRole used to force a long-lived token into the secret. Trading
+        # that for one obtained here removes the standing credential: the
+        # AppRole is scoped by its own policies, and the token is revoked when
+        # the step exits.
+        #
+        # The revoke is not cosmetic. The login inherits the ROLE's token_ttl,
+        # which on the labul infra Vault is 32 DAYS -- without an explicit
+        # revoke every build would leave behind a month-valid credential, which
+        # is the very thing this replaces. Vault has no "give me a 10-minute
+        # token" knob on the login call, so the trap is the mechanism.
+        #
+        # Only fires when VAULT_TOKEN is absent -- every existing secret that
+        # carries a token behaves exactly as before, so this is additive.
+        #
+        # The image has no vault CLI (checked on sthings-packer:2.0.0), hence
+        # curl + jq. The payload goes in over stdin rather than argv so the
+        # role/secret id never appear in the process table.
+        if [ -z "${VAULT_TOKEN:-}" ] && [ -n "${VAULT_ROLE_ID:-}" ] && [ -n "${VAULT_SECRET_ID:-}" ]; then
+          if [ -z "${VAULT_ADDR:-}" ]; then
+            echo "VAULT_ROLE_ID is set but VAULT_ADDR is empty - check the vault secret" >&2
+            exit 1
+          fi
+
+          echo "=========================================="
+          echo "VAULT APPROLE LOGIN"
+          echo "=========================================="
+          echo "VAULT_ADDR: ${VAULT_ADDR}"
+
+          # curl does not read SSL_CERT_FILE; point it at the same per-run
+          # bundle the trust-ca-certs step built, so a private-CA Vault works
+          # without --insecure.
+          CACERT_FLAG=""
+          if [ -s "${SSL_CERT_FILE:-}" ]; then
+            CACERT_FLAG="--cacert ${SSL_CERT_FILE}"
+          fi
+
+          # shellcheck disable=SC2086
+          LOGIN_RESPONSE=$(
+            jq -n --arg r "${VAULT_ROLE_ID}" --arg s "${VAULT_SECRET_ID}" \
+                 '{role_id: $r, secret_id: $s}' \
+            | curl -sS --max-time 30 ${CACERT_FLAG} \
+                   -X POST --data @- \
+                   "${VAULT_ADDR%/}/v1/auth/${VAULT_APPROLE_PATH:-approle}/login"
+          ) || {
+            echo "Vault login request failed (network/TLS) against ${VAULT_ADDR}" >&2
+            exit 1
+          }
+
+          VAULT_TOKEN=$(printf '%s' "${LOGIN_RESPONSE}" | jq -r '.auth.client_token // empty')
+          if [ -z "${VAULT_TOKEN}" ]; then
+            # .errors is Vault's own message and carries no credential material.
+            echo "Vault AppRole login failed: $(printf '%s' "${LOGIN_RESPONSE}" | jq -rc '.errors // "no token in response"')" >&2
+            exit 1
+          fi
+          export VAULT_TOKEN
+
+          # Revoke on the way out, whatever the outcome. `|| true` and the
+          # saved exit code keep the trap from rewriting the step's real
+          # result -- a failed revoke must not turn a failed build green, nor
+          # a green build red.
+          # shellcheck disable=SC2064,SC2086
+          trap 'rc=$?; curl -sS --max-time 10 '"${CACERT_FLAG}"' -X POST \
+                  -H "X-Vault-Token: ${VAULT_TOKEN}" \
+                  "${VAULT_ADDR%/}/v1/auth/token/revoke-self" >/dev/null 2>&1 \
+                  || echo "warning: could not revoke the Vault token" >&2; exit $rc' EXIT
+
+          # Echo the granted policies. Nearly every failure in this area is a
+          # token pointed at the wrong Vault or missing a path grant, and both
+          # are obvious from this one line -- it turns a confusing "permission
+          # denied" deep inside a 20-minute build into an up-front check.
+          # shellcheck disable=SC2086
+          printf 'token policies: %s\n' \
+            "$(curl -sS --max-time 15 ${CACERT_FLAG} \
+                    -H "X-Vault-Token: ${VAULT_TOKEN}" \
+                    "${VAULT_ADDR%/}/v1/auth/token/lookup-self" \
+               | jq -rc '.data.policies // "unknown"')"
+        fi
 
         # `packer init` first, in THIS container, so the plugins it installs
         # are visible to the validate/build below. ACTION=init always inits -
