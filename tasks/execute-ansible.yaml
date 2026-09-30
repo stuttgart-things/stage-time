@@ -272,15 +272,36 @@ spec:
 
           mkdir -p ./collections
 
+          # Galaxy fails transiently (connection resets, 5xx, hung requests),
+          # and a failed step fails the whole PipelineRun, which Crossplane VM
+          # orders never re-create (see issue #92). So each install gets
+          # MAX_ATTEMPTS tries with a growing pause in between, and every
+          # ansible-galaxy request is capped by GALAXY_TIMEOUT seconds.
+          MAX_ATTEMPTS=3
+          GALAXY_TIMEOUT=60
+
           for param in "$@"
           do
-            echo "Installing collection: ${param}"
-            if ansible-galaxy collection install "${param}" -f -p ./collections; then
-              echo "Successfully installed collection ${param}"
-            else
-              echo "ERROR: Failed to install collection ${param}"
-              exit 1
-            fi
+            attempt=1
+            while :
+            do
+              echo "Installing collection: ${param} (attempt ${attempt}/${MAX_ATTEMPTS})"
+              if ansible-galaxy collection install "${param}" -f -p ./collections --timeout "${GALAXY_TIMEOUT}"; then
+                echo "Successfully installed collection ${param}"
+                break
+              fi
+
+              if [ "${attempt}" -ge "${MAX_ATTEMPTS}" ]; then
+                echo "ERROR: Failed to install collection ${param} after ${MAX_ATTEMPTS} attempts"
+                exit 1
+              fi
+
+              # 5s after the 1st failure, 15s after the 2nd, 25s after the 3rd, ...
+              backoff=$(( attempt * 10 - 5 ))
+              echo "WARNING: Attempt ${attempt}/${MAX_ATTEMPTS} to install collection ${param} failed, retrying in ${backoff}s"
+              sleep "${backoff}"
+              attempt=$(( attempt + 1 ))
+            done
           done
 
           echo "Installed collections:"
