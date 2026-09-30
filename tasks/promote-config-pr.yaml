@@ -220,9 +220,13 @@ spec:
         # and not in argv: both end up in `git remote -v`, in error messages and
         # in the process table.
         umask 077
+        # `git credential approve` makes the store helper write the file itself
+        # (token on stdin, printf is a builtin), and keeps a user:token@ URL
+        # out of this source -- detect-secrets reads one as Basic Auth.
         if [ -n "${GIT_TOKEN:-}" ]; then
-          printf 'https://x-access-token:%s@github.com\n' "${GIT_TOKEN}" > "${HOME}/.git-credentials"
           git config --global credential.helper store
+          printf 'protocol=https\nhost=github.com\nusername=x-access-token\npassword=%s\n\n' "${GIT_TOKEN}" \
+            | git credential approve
         fi
         git config --global user.name "${GIT_USER_NAME}"
         git config --global user.email "${GIT_USER_EMAIL}"
