@@ -36,12 +36,8 @@ _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or opt
 # Pinned to a released tag, NOT "main": the git resolver fetches the pipeline
 # definition at render time, so an unpinned default silently changes what runs
 # whenever stage-time's main moves. Matches kcl/ansible. Bump alongside the
-# pipeline, and only to a tag whose packer pipelines resolve their own tasks at
-# a tag that already carries them (the two-step re-pin, see #95/#96). v0.13.5
-# is the first such tag with execute-packer's AppRole login (#85): v0.9.0, the
-# old default, has none, so a Proxmox/vault-infra build died with
-# "Must set VAULT_TOKEN".
-_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.13.5"
+# pipeline; v0.9.0 is the tag every validated packer run has used.
+_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.9.0"
 _pipelinePath = _flat_params?.pipelinePath or _env?.pipelinePath or option("pipelinePath") or "pipelines/build-packer-template.yaml"
 
 # --- Template SOURCE repo (the .pkr.hcl templates the pipeline checks out) ---

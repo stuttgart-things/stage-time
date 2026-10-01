@@ -84,7 +84,7 @@ spec:
           # an unpinned default silently changes what runs. Bump alongside the
           # task. Must be a tag that CONTAINS tasks/execute-govc.yaml.
           - name: revision
-            value: v0.13.4
+            value: v0.10.0
           - name: pathInRepo
             value: tasks/execute-govc.yaml
       workspaces:
