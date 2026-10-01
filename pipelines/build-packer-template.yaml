@@ -93,6 +93,12 @@ spec:
     - name: template-name
       description: name of the template/artifact produced by the build
       value: $(tasks.execute-packer.results.template-name)
+    - name: template-display-name
+      description: >-
+        the template's name as the hypervisor shows it. Equals template-name on
+        vsphere-iso; on proxmox-iso, where template-name is the VMID, it is the
+        template_name the build wrote to packer-manifest.json
+      value: $(tasks.execute-packer.results.template-display-name)
   tasks:
     - name: fetch-repository
       taskRef:
@@ -138,7 +144,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.12.0
+            value: v0.13.5
           - name: pathInRepo
             value: tasks/execute-packer.yaml
       workspaces:
