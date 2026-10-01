@@ -10,7 +10,9 @@ Context for working on this KCL module with Claude Code.
   pipeline from a `PackerBuild`-shaped input, optionally wrapped in a
   `kubernetes.m.crossplane.io/v1alpha1` **Object** (provider-kubernetes).
 - The Packer sibling of [`kcl/ansible`](../ansible) (`kcl-tekton-pr`). The
-  client-side XR generator is [`kcl/packer-run`](../packer-run).
+  former client-side XR generator `kcl/packer-run` was retired (#96); the
+  `PackerBuild` examples in crossplane-configurations
+  (`cicd/packer-build/examples/xr*.yaml`) replace it.
 - Published manually to `oci://ghcr.io/stuttgart-things/kcl-tekton-pr-packer`
   (OCI tag = `version` in `kcl.mod`). No CI publishes it — `kcl mod push`.
 - Files: `main.k` (field resolution + validation + render), `defaults.k`

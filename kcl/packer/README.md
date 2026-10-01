@@ -6,9 +6,10 @@
 > Crossplane applies it on a target cluster.
 >
 > This is the Packer sibling of [`kcl/ansible`](../ansible)
-> (`kcl-tekton-pr`). The **client-side XR generator** is
-> [`kcl/packer-run`](../packer-run); this module is the **renderer** the
-> Crossplane Composition consumes.
+> (`kcl-tekton-pr`). It is the **renderer** the Crossplane Composition
+> consumes; for the `PackerBuild` XR itself see the XRD and examples in
+> `crossplane-configurations` (`cicd/packer-build/apis/definition.yaml`,
+> `cicd/packer-build/examples/xr*.yaml`).
 
 Published manually to `oci://ghcr.io/stuttgart-things/kcl-tekton-pr-packer`
 (the OCI tag = `version` in `kcl.mod`):
