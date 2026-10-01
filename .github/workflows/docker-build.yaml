@@ -39,7 +39,7 @@ jobs:
       - name: Dagger Build and Push (ttl.sh)
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/docker@v0.90.1
           call: >-
             build-and-push
@@ -54,7 +54,7 @@ jobs:
       - name: Scan image with Trivy
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/trivy@v0.90.1
           call: scan-image --image-ref="ttl.sh/${{ env.IMAGE }}:${{ github.sha }}" --severity="HIGH,CRITICAL" --trivy-version="0.64.1" export --path=/tmp/trivy-scan-report.json
           cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
@@ -103,7 +103,7 @@ jobs:
       - name: Dagger Build and Push (ghcr :sha)
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/docker@v0.90.1
           call: >-
             build-and-push
@@ -120,7 +120,7 @@ jobs:
       - name: Scan image with Trivy
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/trivy@v0.90.1
           call: scan-image --image-ref="${{ env.REGISTRY }}/${{ env.IMAGE }}:${{ github.sha }}" --severity="HIGH,CRITICAL" --trivy-version="0.64.1" export --path=/tmp/trivy-scan-report.json
           cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
@@ -137,7 +137,7 @@ jobs:
       - name: Crane re-tag :sha → :version
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/crane@v0.91.0
           call: >-
             copy
@@ -154,7 +154,7 @@ jobs:
       - name: Crane re-tag :sha → :latest
         uses: dagger/dagger-for-github@v8.4.1
         with:
-          version: v0.20.3
+          version: 0.21.10
           module: github.com/stuttgart-things/dagger/crane@v0.91.0
           call: >-
             copy
