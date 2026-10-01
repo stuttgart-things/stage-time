@@ -125,7 +125,16 @@ spec:
       description: >-
         name of the template/artifact produced by a build, parsed from packer's
         artifact log line. A build that produces no artifact fails the task
-        (downstream promote/rename steps depend on this name)
+        (downstream promote/rename steps depend on this name). This is the
+        artifact ID: the template name on vsphere-iso, but the numeric VMID on
+        proxmox-iso
+    - name: template-display-name
+      description: >-
+        the template's name as the hypervisor shows it. Taken from
+        custom_data.template_name of the build entry in packer-manifest.json
+        (manifest post-processor) whose artifact_id matches template-name;
+        falls back to template-name when the build writes no such entry, which
+        is right for vsphere-iso, where the artifact ID already is the name
   stepTemplate:
     workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
     image: "$(params.WORKING_IMAGE)"
@@ -301,9 +310,11 @@ spec:
         set -euo pipefail
 
         # Always declare the results so Tekton does not warn about unset
-        # results; the build branch overwrites template-name on success.
+        # results; the build branch overwrites template-name and
+        # template-display-name on success.
         printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
         printf '' > "$(results.template-name.path)"
+        printf '' > "$(results.template-display-name.path)"
 
         # AppRole login, when the vault secret carries no VAULT_TOKEN.
         #
@@ -478,6 +489,26 @@ spec:
             fi
             printf '%s' "${TEMPLATE_NAME}" > "$(results.template-name.path)"
             echo "template-name: ${TEMPLATE_NAME}"
+
+            # The display name. On proxmox-iso the artifact ID is the VMID and
+            # packer prints the template_name nowhere (the plugin's artifact is
+            # "A template was created: <vmid>"), yet the release needs both:
+            # the VMID for promotion, the name for humans and name-based
+            # clones. A build that wants to report it adds a manifest
+            # post-processor with custom_data.template_name; the manifest
+            # post-processor passes the builder artifact through, so the
+            # artifact ID above is unchanged. Matching on artifact_id keeps a
+            # stale or multi-build manifest from naming the wrong template.
+            # Best effort: a missing or unreadable manifest is not an error.
+            TEMPLATE_DISPLAY_NAME=""
+            if [ -f packer-manifest.json ]; then
+              TEMPLATE_DISPLAY_NAME=$(jq -r --arg id "${TEMPLATE_NAME}" \
+                '[.builds[]? | select(.artifact_id == $id) | .custom_data.template_name // empty] | last // empty' \
+                packer-manifest.json 2>/dev/null || true)
+            fi
+            TEMPLATE_DISPLAY_NAME="${TEMPLATE_DISPLAY_NAME:-${TEMPLATE_NAME}}"
+            printf '%s' "${TEMPLATE_DISPLAY_NAME}" > "$(results.template-display-name.path)"
+            echo "template-display-name: ${TEMPLATE_DISPLAY_NAME}"
             ;;
           *)
             echo "ERROR: unsupported ACTION '${ACTION}' (expected init, validate or build)" >&2
