@@ -81,6 +81,19 @@ spec:
       type: string
       default: "main"
       description: revision of source git repo
+    - name: templateLookupVaultPath
+      type: string
+      default: ""
+      description: >-
+        vSphere only: Vault KV v2 path with the vCenter credentials (keys
+        username/password/ip), normally the path the packer template reads
+        with vault(), e.g. cloud/data/vsphere-labda. Set, execute-packer reads
+        the built template's config.uuid with govc into the template-uuid
+        result. Empty = no lookup (template-uuid stays empty)
+    - name: templateLookupInsecure
+      type: string
+      default: "false"
+      description: '"true" skips vCenter TLS verification for the template-uuid lookup'
     - name: gitWorkspaceSubdirectory
       type: string
       default: ""
@@ -99,6 +112,13 @@ spec:
         vsphere-iso; on proxmox-iso, where template-name is the VMID, it is the
         template_name the build wrote to packer-manifest.json
       value: $(tasks.execute-packer.results.template-display-name)
+    - name: template-uuid
+      description: >-
+        vsphere-iso only: config.uuid (BIOS UUID) of the built template, what
+        NativeVsphereVM clones by. Empty on Proxmox, without
+        templateLookupVaultPath, or when the lookup failed (a warning, never
+        a build failure)
+      value: $(tasks.execute-packer.results.template-uuid)
   tasks:
     - name: fetch-repository
       taskRef:
@@ -144,7 +164,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.13.5
+            value: v0.13.7
           - name: pathInRepo
             value: tasks/execute-packer.yaml
       workspaces:
@@ -183,3 +203,7 @@ spec:
           value: $(params.credentialsSecretName)
         - name: vault-secret-name
           value: $(params.vaultSecretName)
+        - name: TEMPLATE_LOOKUP_VAULT_PATH
+          value: $(params.templateLookupVaultPath)
+        - name: TEMPLATE_LOOKUP_INSECURE
+          value: $(params.templateLookupInsecure)
