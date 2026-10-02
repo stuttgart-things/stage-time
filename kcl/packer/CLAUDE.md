@@ -53,6 +53,13 @@ Same as `kcl-tekton-pr`: Composition mode (`params.oxr.spec` + `ctx` env +
 `ocds` + `dxr`, output `items=[...]`) or flat `-D` mode (single resource).
 Precedence: `oxr.spec.<field>` → EnvironmentConfig → `-D` option → default.
 
+## Optional template-uuid lookup params (0.7.0)
+`templateLookupVaultPath` / `templateLookupInsecure` are emitted as pipeline
+params ONLY when non-empty. Tekton rejects undeclared params, and pipelines
+before v0.13.8 do not declare them — an unconditional key would break every
+caller pinned to an older `pipelineRevision`. Keep any future optional pipeline
+param conditional the same way.
+
 ## Opt-in readiness
 `deriveReadiness` (default `false`): only takes effect with
 `wrapInCrossplane=true` — it adds `spec.readiness.policy: DeriveFromCelQuery`

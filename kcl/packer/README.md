@@ -62,6 +62,23 @@ kcl run main.k \
   -D packerOnly=vsphere-iso.ubuntu24
 ```
 
+## vSphere template UUID (0.7.0)
+
+`templateLookupVaultPath` / `templateLookupInsecure` (spec → EnvironmentConfig →
+`-D`) become the pipeline params of the same name, which make execute-packer
+read the built template's `config.uuid` with govc into the `template-uuid`
+result. The path is the Vault KV v2 path the packer template reads its vCenter
+credentials from (e.g. `cloud/data/vsphere-labda`, keys
+`username`/`password`/`ip`). Both are emitted **only when set**: Tekton rejects
+a param the pipeline does not declare, so a caller pinned below stage-time
+v0.13.8 keeps working. The lookup is best effort; a failure is a warning in the
+TaskRun log and an empty result, never a failed build.
+
+```bash
+kcl run main.k -D osVersion=ubuntu26 -D lab=labda -D provisioning=base-os \
+  -D templateLookupVaultPath=cloud/data/vsphere-labda -D templateLookupInsecure=true
+```
+
 ## Readiness
 
 `deriveReadiness` (default `false`): when true AND `wrapInCrossplane=true`, the

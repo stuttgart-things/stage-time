@@ -40,8 +40,10 @@ _pipelineRepoUrl = _flat_params?.pipelineRepoUrl or _env?.pipelineRepoUrl or opt
 # tag that already carries them (the two-step re-pin, #95/#96). v0.13.6 is the
 # first such tag with execute-packer's AppRole login (#85) and the
 # template-display-name result. v0.9.0, the old default, has no AppRole login,
-# so a Proxmox/vault-infra build died with "Must set VAULT_TOKEN".
-_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.13.6"
+# so a Proxmox/vault-infra build died with "Must set VAULT_TOKEN". v0.13.8 adds
+# the template-uuid result and the templateLookup* params below
+# (crossplane-configurations#529).
+_pipelineRevision = _flat_params?.pipelineRevision or _env?.pipelineRevision or option("pipelineRevision") or "v0.13.8"
 _pipelinePath = _flat_params?.pipelinePath or _env?.pipelinePath or option("pipelinePath") or "pipelines/build-packer-template.yaml"
 
 # --- Template SOURCE repo (the .pkr.hcl templates the pipeline checks out) ---
@@ -92,6 +94,15 @@ _packerWorkingImage = _flat_params?.packerWorkingImage or _env?.packerWorkingIma
 _credentialsSecretName = _flat_params?.credentialsSecretName or _env?.credentialsSecretName or option("credentialsSecretName") or "packer-credentials"
 _vaultSecretName = _flat_params?.vaultSecretName or option("vaultSecretName") or "vault"
 _userHome = _flat_params?.userHome or option("userHome") or "/home/nonroot"
+
+# vSphere template-uuid lookup (pipeline >= v0.13.8): the Vault KV v2 path with
+# the vCenter credentials the packer template itself reads (e.g.
+# cloud/data/vsphere-labda), and whether to skip vCenter TLS verification.
+# Per lab, so the EnvironmentConfig may supply them. Emitted as pipeline params
+# ONLY when set: Tekton rejects a param the pipeline does not declare, so an
+# unconditional key would break every caller still pinned below v0.13.8.
+_templateLookupVaultPath = _flat_params?.templateLookupVaultPath or _env?.templateLookupVaultPath or option("templateLookupVaultPath") or ""
+_templateLookupInsecure = _flat_params?.templateLookupInsecure or _env?.templateLookupInsecure or option("templateLookupInsecure") or ""
 
 # Input validation (asserts on resolved values, so it covers both composition
 # oxr.spec inputs and flat -D options).
@@ -193,6 +204,10 @@ _pipeline_params_override = {
     gitRepoUrl = _gitRepoUrl
     gitRevision = _gitRevision
     gitWorkspaceSubdirectory = _gitWorkspaceSubdirectory
+    if _templateLookupVaultPath:
+        templateLookupVaultPath = _templateLookupVaultPath
+    if _templateLookupInsecure:
+        templateLookupInsecure = str(_templateLookupInsecure).lower()
 }
 
 # --- Generate the PipelineRun ---
