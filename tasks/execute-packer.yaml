@@ -118,6 +118,40 @@ spec:
         mounted under any name, so this is a parameter rather than a constant.
       type: string
       default: "approle"
+    # --- template UUID lookup (vSphere only) ------------------------------
+    # After a successful vsphere-iso build the task reads the template's
+    # config.uuid (the BIOS UUID consumers such as NativeVsphereVM clone by)
+    # with govc. vCenter credentials come from GOVC_URL/GOVC_USERNAME/
+    # GOVC_PASSWORD when the credentials secret already carries them, else
+    # from the Vault KV v2 path below -- the path the packer template reads
+    # with vault() (e.g. cloud/data/vsphere-labda), with the token this step
+    # already holds. Empty path and no GOVC_URL: no lookup, empty result.
+    # Best effort throughout: a failed lookup warns and never fails the build.
+    - name: TEMPLATE_LOOKUP_VAULT_PATH
+      description: >-
+        Vault KV v2 read path holding the vCenter credentials for the
+        template-uuid lookup (same path the packer template reads, e.g.
+        cloud/data/vsphere-labda). Empty = no Vault read
+      type: string
+      default: ""
+    - name: TEMPLATE_LOOKUP_VAULT_KEY_USERNAME
+      description: key in that Vault secret holding the vCenter username
+      type: string
+      default: "username"
+    - name: TEMPLATE_LOOKUP_VAULT_KEY_PASSWORD
+      description: key in that Vault secret holding the vCenter password
+      type: string
+      default: "password"
+    - name: TEMPLATE_LOOKUP_VAULT_KEY_SERVER
+      description: key in that Vault secret holding the vCenter host/IP (same convention as execute-govc)
+      type: string
+      default: "ip"
+    - name: TEMPLATE_LOOKUP_INSECURE
+      description: >-
+        "true" skips vCenter TLS verification for the lookup (govc -k), for
+        a vCenter the packer template also reaches with insecure_connection
+      type: string
+      default: "false"
   results:
     - name: action-performed
       description: the packer action that was executed
@@ -135,6 +169,13 @@ spec:
         (manifest post-processor) whose artifact_id matches template-name;
         falls back to template-name when the build writes no such entry, which
         is right for vsphere-iso, where the artifact ID already is the name
+    - name: template-uuid
+      description: >-
+        vsphere-iso only: config.uuid (BIOS UUID) of the template the build
+        produced, read with govc after the build. Empty on other builders,
+        when no vCenter credentials are configured
+        (TEMPLATE_LOOKUP_VAULT_PATH / GOVC_URL), or when the lookup failed --
+        which is a warning, never a build failure
   stepTemplate:
     workingDir: $(workspaces.source.path)/$(params.SUB_DIRECTORY)
     image: "$(params.WORKING_IMAGE)"
@@ -298,6 +339,16 @@ spec:
               optional: true
         - name: VAULT_APPROLE_PATH
           value: $(params.vault-approle-auth-path)
+        - name: TEMPLATE_LOOKUP_VAULT_PATH
+          value: $(params.TEMPLATE_LOOKUP_VAULT_PATH)
+        - name: TEMPLATE_LOOKUP_VAULT_KEY_USERNAME
+          value: $(params.TEMPLATE_LOOKUP_VAULT_KEY_USERNAME)
+        - name: TEMPLATE_LOOKUP_VAULT_KEY_PASSWORD
+          value: $(params.TEMPLATE_LOOKUP_VAULT_KEY_PASSWORD)
+        - name: TEMPLATE_LOOKUP_VAULT_KEY_SERVER
+          value: $(params.TEMPLATE_LOOKUP_VAULT_KEY_SERVER)
+        - name: TEMPLATE_LOOKUP_INSECURE
+          value: $(params.TEMPLATE_LOOKUP_INSECURE)
       envFrom:
         - secretRef:
             name: $(params.credentials-secret-name)
@@ -315,6 +366,7 @@ spec:
         printf '%s' "$(params.ACTION)" > "$(results.action-performed.path)"
         printf '' > "$(results.template-name.path)"
         printf '' > "$(results.template-display-name.path)"
+        printf '' > "$(results.template-uuid.path)"
 
         # AppRole login, when the vault secret carries no VAULT_TOKEN.
         #
@@ -397,6 +449,75 @@ spec:
                     "${VAULT_ADDR%/}/v1/auth/token/lookup-self" \
                | jq -rc '.data.policies // "unknown"')"
         fi
+
+        # template-uuid lookup (vSphere). Prints the UUID on stdout and NOTHING
+        # else; every message goes to stderr. Runs in a subshell -- ( ) body --
+        # so the vCenter credentials it exports never reach the rest of the
+        # step, and `set -e` is dropped inside so no failure here can fail a
+        # build that already succeeded: every path returns 0.
+        lookup_template_uuid() (
+          set +e +o pipefail
+          name="$1"
+          warn() { echo "WARNING: template-uuid lookup: $*" >&2; }
+
+          if [ -z "${GOVC_URL:-}" ]; then
+            if [ -z "${TEMPLATE_LOOKUP_VAULT_PATH:-}" ]; then
+              echo "template-uuid: no TEMPLATE_LOOKUP_VAULT_PATH and no GOVC_URL - lookup skipped" >&2
+              return 0
+            fi
+            if [ -z "${VAULT_ADDR:-}" ] || [ -z "${VAULT_TOKEN:-}" ]; then
+              warn "VAULT_ADDR/VAULT_TOKEN not available - skipped"
+              return 0
+            fi
+            ns_header=()
+            [ -n "${VAULT_NAMESPACE:-}" ] && ns_header=(-H "X-Vault-Namespace: ${VAULT_NAMESPACE}")
+            vc_json=$(mktemp)
+            code=$(curl -sS --max-time 30 --cacert "${SSL_CERT_FILE}" -o "${vc_json}" -w '%{http_code}' \
+                     -H "X-Vault-Token: ${VAULT_TOKEN}" "${ns_header[@]}" \
+                     "${VAULT_ADDR%/}/v1/${TEMPLATE_LOOKUP_VAULT_PATH}" 2>/dev/null)
+            if [ "${code}" != "200" ]; then
+              # Never echo the body: a Vault error can quote request data.
+              rm -f "${vc_json}"
+              warn "reading ${TEMPLATE_LOOKUP_VAULT_PATH} from Vault returned HTTP ${code:-none} - skipped"
+              return 0
+            fi
+            GOVC_USERNAME=$(jq -r --arg k "${TEMPLATE_LOOKUP_VAULT_KEY_USERNAME}" '.data.data[$k] // empty' "${vc_json}")
+            GOVC_PASSWORD=$(jq -r --arg k "${TEMPLATE_LOOKUP_VAULT_KEY_PASSWORD}" '.data.data[$k] // empty' "${vc_json}")
+            vc_server=$(jq -r --arg k "${TEMPLATE_LOOKUP_VAULT_KEY_SERVER}" '.data.data[$k] // empty' "${vc_json}")
+            rm -f "${vc_json}"
+            if [ -z "${GOVC_USERNAME}" ] || [ -z "${GOVC_PASSWORD}" ] || [ -z "${vc_server}" ]; then
+              warn "${TEMPLATE_LOOKUP_VAULT_PATH} lacks one of the keys ${TEMPLATE_LOOKUP_VAULT_KEY_USERNAME}/${TEMPLATE_LOOKUP_VAULT_KEY_PASSWORD}/${TEMPLATE_LOOKUP_VAULT_KEY_SERVER} - skipped"
+              return 0
+            fi
+            export GOVC_USERNAME GOVC_PASSWORD
+            export GOVC_URL="https://${vc_server}/sdk"
+          fi
+          command -v govc >/dev/null 2>&1 || { warn "govc not in the working image (needs sthings-packer >= 2.0.0) - skipped"; return 0; }
+          # govc reads its own CA variable, not SSL_CERT_FILE.
+          export GOVC_TLS_CA_CERTS="${SSL_CERT_FILE}"
+          [ "${TEMPLATE_LOOKUP_INSECURE:-false}" = "true" ] && export GOVC_INSECURE=1
+          to=""
+          command -v timeout >/dev/null 2>&1 && to="timeout 120"
+
+          # By name across every datacenter: the build's folder lives in the
+          # template, not here. The name carries the build timestamp, so more
+          # than one hit is an inventory surprise -- refuse to guess.
+          # shellcheck disable=SC2086
+          paths=$(${to} govc find / -type m -name "${name}" 2>/dev/null)
+          hits=$(printf '%s\n' "${paths}" | grep -c . )
+          if [ "${hits}" != "1" ]; then
+            warn "found ${hits} VM/template(s) named '${name}' in vCenter (expected 1) - skipped"
+            return 0
+          fi
+          # shellcheck disable=SC2086
+          uuid=$(${to} govc object.collect -s "${paths}" config.uuid 2>/dev/null | tr -d '[:space:]')
+          if ! printf '%s' "${uuid}" | grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
+            warn "no usable config.uuid on ${paths} - skipped"
+            return 0
+          fi
+          echo "template-uuid: ${paths} -> ${uuid}" >&2
+          printf '%s' "${uuid}"
+        )
 
         # `packer init` first, in THIS container, so the plugins it installs
         # are visible to the validate/build below. ACTION=init always inits -
@@ -509,6 +630,24 @@ spec:
             TEMPLATE_DISPLAY_NAME="${TEMPLATE_DISPLAY_NAME:-${TEMPLATE_NAME}}"
             printf '%s' "${TEMPLATE_DISPLAY_NAME}" > "$(results.template-display-name.path)"
             echo "template-display-name: ${TEMPLATE_DISPLAY_NAME}"
+
+            # The template's BIOS UUID (config.uuid), vsphere-iso only: what a
+            # consumer like NativeVsphereVM addresses a template by. packer
+            # reports it nowhere, so it is read back from vCenter. The builder
+            # is taken from the same artifact events as the name, so a Proxmox
+            # (or any other) build skips this and leaves the result empty.
+            BUILDER_ID=$(awk -F, '$3 == "artifact" && $5 == "builder-id" { print $6 }' /tmp/packer-build.log | tail -1)
+            TEMPLATE_UUID=""
+            case "${BUILDER_ID}" in
+              *vsphere*)
+                TEMPLATE_UUID=$(lookup_template_uuid "${TEMPLATE_NAME}" || true)
+                ;;
+              *)
+                echo "template-uuid: builder '${BUILDER_ID:-unknown}' is not vSphere - left empty"
+                ;;
+            esac
+            printf '%s' "${TEMPLATE_UUID}" > "$(results.template-uuid.path)"
+            echo "template-uuid: ${TEMPLATE_UUID:-<empty>}"
             ;;
           *)
             echo "ERROR: unsupported ACTION '${ACTION}' (expected init, validate or build)" >&2
