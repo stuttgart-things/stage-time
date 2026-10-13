@@ -7,7 +7,7 @@
 # whose Python deps (hvac, PyVmomi, kubernetes, ...) are exactly the set
 # sthings-ansible already installs. Inheriting that stack avoids maintaining a
 # second copy of the pip list that would silently drift.
-FROM ghcr.io/stuttgart-things/sthings-ansible:14.0.0
+FROM ghcr.io/stuttgart-things/sthings-ansible:14.5.0
 
 # VERSIONS
 #
