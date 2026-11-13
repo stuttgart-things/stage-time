@@ -296,10 +296,15 @@ spec:
         # ---------------------------------------------------------------
         # helpers
         # ---------------------------------------------------------------
-        # `govc ls` prints the path when the object exists and nothing when it
-        # does not. Errors are swallowed so a missing object reads as absent
-        # rather than aborting under set -e.
-        exists() { [ -n "$(govc ls "$1" 2>/dev/null || true)" ]; }
+        # Tests the object ITSELF, not its contents. `govc ls <folder>` lists
+        # the folder's children, so an EMPTY folder printed nothing and read
+        # as "not found" -- which aborted exactly the first promotion into a
+        # fresh or emptied golden folder (#102). object.collect resolves the
+        # inventory path to the managed object and reads its name: exit 0
+        # for any existing folder/VM/template, non-zero ("... not found")
+        # when the path does not resolve. Output and errors are swallowed so
+        # a missing object reads as absent rather than aborting under set -e.
+        exists() { govc object.collect -s "$1" name >/dev/null 2>&1; }
 
         # object.rename / object.destroy / object.mv are used rather than
         # vm.change / vm.markasvm+vm.destroy: these operate on the managed

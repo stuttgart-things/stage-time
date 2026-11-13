@@ -97,3 +97,8 @@ tasks:
 
         # Run the selected task
         [ -n "$task_name" ] && task "$task_name"
+
+  test-execute-govc:
+    desc: Offline test of the execute-govc promote path (stubbed govc + Vault, needs yq)
+    cmds:
+      - tests/execute-govc/test-promote.sh
