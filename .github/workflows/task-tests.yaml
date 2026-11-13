@@ -21,7 +21,7 @@ jobs:
     name: execute-govc promote (offline)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # yq (mikefarah) is preinstalled on ubuntu-latest; the test extracts the
       # task's step script with it and runs it against a stubbed govc/Vault.
       - name: Run promote cases
