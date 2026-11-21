@@ -2,8 +2,8 @@
 # execute-persona-run -- one ai-personas run (persona x scenario x lab) as three
 # pods, so each gets only the egress and the secrets it needs:
 #
-#   credentials  Vault (AppRole) + ZITADEL  -> persona token, ssh key  (Vault secret)
-#   run          claude -p in the runner image, persona token only     (Anthropic key)
+#   credentials  Vault (AppRole) + ZITADEL  -> persona token, ssh key  (Vault AppRole secret)
+#   run          claude -p in the runner image, persona token only     (Claude credential)
 #   publish      report into the private runs repo                     (git token)
 #
 # Runs merge: auto scenarios by default (the order service merges the PR once
@@ -70,7 +70,7 @@ spec:
     # ---- secrets ----
     - name: vaultSecretName
       type: string
-      default: "vault"
+      default: "vault-ai-personas-runner"
     - name: anthropicSecretName
       type: string
       default: "anthropic"
