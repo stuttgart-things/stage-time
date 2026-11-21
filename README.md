@@ -377,8 +377,10 @@ spec:
       value: https://orders.example.com
     - name: runsRepo
       value: <owner>/<private-runs-repo>
-    - name: runnerImage
-      value: <registry>/ai-personas-runner:<tag>
+    - name: runnerImage   # tag = ai-personas commit
+      value: ghcr.io/stuttgart-things/ai-personas-runner:ba325bce3ac6337cb070c1a863ed3d7b40c7b5f6
+    - name: aiPersonasRevision   # same commit, for publish-run
+      value: ba325bce3ac6337cb070c1a863ed3d7b40c7b5f6
 EOF
 ```
 
