@@ -8,7 +8,8 @@
 # Credentials: the first step moves the persona token and the SSH key from the
 # credentials workspace into memory-backed emptyDirs and deletes them from the
 # volume; the run step reads the token into its environment and deletes the
-# file before claude starts. The Anthropic key comes from a Secret.
+# file before claude starts. The Claude credential (API key or OAuth token)
+# comes from a Secret.
 #
 # The entrypoint checks the output for every credential at the end; on a hit it
 # deletes the output and exits 3, so this task fails and nothing is published.
@@ -61,10 +62,10 @@ spec:
     - name: anthropic-secret-name
       type: string
       default: "anthropic"
-      description: Secret with the Anthropic API key (no subscription tokens in shared CI)
-    - name: anthropic-secret-key
-      type: string
-      default: "ANTHROPIC_API_KEY"
+      description: >-
+        Secret whose keys become claude's environment: ANTHROPIC_API_KEY (API
+        key, for regular CI) or CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token`,
+        one person's subscription; test phase only). Put nothing else in it.
   volumes:
     - name: persona-token
       emptyDir:
@@ -129,11 +130,11 @@ spec:
         # only has to allow the Anthropic API itself.
         - name: CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
           value: "1"
-        - name: ANTHROPIC_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: $(params.anthropic-secret-name)
-              key: $(params.anthropic-secret-key)
+      # ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN, whichever the Secret
+      # holds; the entrypoint takes either and checks both in its leak check.
+      envFrom:
+        - secretRef:
+            name: $(params.anthropic-secret-name)
       # Requests only: claude + node + the persona's tool calls vary a lot.
       computeResources:
         requests:

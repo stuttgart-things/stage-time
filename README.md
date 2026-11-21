@@ -302,8 +302,8 @@ One persona × scenario × lab: `claude -p` in the ai-personas runner image with
 
 | Pipeline task | Task file | Image | Secrets | Egress | Does |
 | --- | --- | --- | --- | --- | --- |
-| `credentials` | `tasks/persona-credentials.yaml` | runner | `vault` (AppRole) | Vault, ZITADEL | checks persona and scenario (`merge: auto`, ssh or not), sets the run id; AppRole login → the persona's client credentials → short-lived ZITADEL token; for ssh scenarios a throwaway key signed by the Vault SSH CA; writes both to `credentials/`, revokes the Vault token |
-| `run` | `tasks/persona-run.yaml` | runner | `anthropic` | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume, then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; leak check at the end (exit 3, nothing published) |
+| `credentials` | `tasks/persona-credentials.yaml` | runner | `vault-ai-personas-runner` (AppRole) | Vault, ZITADEL | checks persona and scenario (`merge: auto`, ssh or not), sets the run id; AppRole login → the persona's client credentials → short-lived ZITADEL token; for ssh scenarios a throwaway key signed by the Vault SSH CA; writes both to `credentials/`, revokes the Vault token |
+| `run` | `tasks/persona-run.yaml` | runner | `anthropic` (API key or Claude Code OAuth token) | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume, then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; leak check at the end (exit 3, nothing published) |
 | `publish` | `tasks/persona-publish.yaml` | sthings-packer (git, jq) | `persona-runs-token` | github.com | `publish-run` from ai-personas at `aiPersonasRevision`: report to `runs/<scenario>/<time>-<persona>/` in the private runs repo, indexes regenerated; skipped when `runsRepo` is empty |
 | `wipe-credentials` (finally) | inline | runner | – | – | deletes `credentials/` in any case |
 
@@ -311,13 +311,15 @@ One persona × scenario × lab: `claude -p` in the ai-personas runner image with
 
 ```bash
 # Vault AppRole: read on ai-personas/data/<lab>/*, update on <sshCaMount>/sign/persona-*
-kubectl -n tekton-ci create secret generic vault \
+kubectl -n tekton-ci create secret generic vault-ai-personas-runner \
   --from-literal=VAULT_ADDR=https://vault.example.com \
   --from-literal=VAULT_ROLE_ID=<role-id> \
   --from-literal=VAULT_SECRET_ID=<secret-id>
 
-# Anthropic API key (no subscription token in shared CI)
-kubectl -n tekton-ci create secret generic anthropic --from-literal=ANTHROPIC_API_KEY=<key>
+# Claude credential, ONE of the two keys; persona-run takes the Secret as env:
+#   ANTHROPIC_API_KEY        API key, for regular CI
+#   CLAUDE_CODE_OAUTH_TOKEN  `claude setup-token` (one person's subscription), test phase only
+kubectl -n tekton-ci create secret generic anthropic --from-literal=CLAUDE_CODE_OAUTH_TOKEN=<token>
 
 # token with contents:write on the private runs repo
 kubectl -n tekton-ci create secret generic persona-runs-token --from-literal=token=<token>
