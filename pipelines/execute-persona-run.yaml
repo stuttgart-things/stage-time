@@ -1,0 +1,220 @@
+---
+# execute-persona-run -- one ai-personas run (persona x scenario x lab) as three
+# pods, so each gets only the egress and the secrets it needs:
+#
+#   credentials  Vault (AppRole) + ZITADEL  -> persona token, ssh key  (Vault secret)
+#   run          claude -p in the runner image, persona token only     (Anthropic key)
+#   publish      report into the private runs repo                     (git token)
+#
+# Runs merge: auto scenarios by default (the order service merges the PR once
+# the checks pass, ai-personas ADR 0004); a merge: human scenario would hold
+# the run pod until a person merges, so persona-credentials refuses it unless
+# allowHumanMerge is "true".
+#
+# The credentials subPath of the workspace carries the token from the first pod
+# to the second; persona-run wipes it before claude starts, and the finally task
+# wipes it in any case. Use a volumeClaimTemplate, so the volume dies with the
+# PipelineRun.
+#
+# Lab binding (URLs, CA, runs repo) comes in as params here; in the fleet repo
+# it is ai-personas/<lab>.yaml, later an EnvironmentConfig behind a PersonaRun XR.
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: execute-persona-run
+spec:
+  workspaces:
+    - name: shared-workspace
+      description: credentials/ and runs/ subPaths; bind a volumeClaimTemplate
+    - name: caCerts
+      optional: true
+      description: the lab's root CA as key `ca.pem` (ConfigMap or Secret)
+  params:
+    # ---- what to run ----
+    - name: persona
+      type: string
+      description: e.g. developer
+    - name: scenario
+      type: string
+      description: e.g. verify-vm-ssh-auto
+    - name: allowHumanMerge
+      type: string
+      default: "false"
+      description: '"true" also runs merge: human scenarios (the pod then waits for the merge)'
+    # ---- lab binding ----
+    - name: lab
+      type: string
+      description: e.g. labul
+    - name: claimApiUrl
+      type: string
+    - name: orderApiUrl
+      type: string
+    - name: sshCaMount
+      type: string
+      default: "ssh-client-signer"
+    - name: vaultKvMount
+      type: string
+      default: "ai-personas"
+    - name: runsRepo
+      type: string
+      default: ""
+      description: owner/repo of the private runs repo; empty skips publishing
+    # ---- images / revisions ----
+    - name: runnerImage
+      type: string
+      description: the ai-personas runner image
+    - name: aiPersonasRevision
+      type: string
+      default: "main"
+      description: ai-personas revision for publish-run; keep it in step with runnerImage
+    # ---- secrets ----
+    - name: vaultSecretName
+      type: string
+      default: "vault"
+    - name: anthropicSecretName
+      type: string
+      default: "anthropic"
+    - name: runsRepoTokenSecretName
+      type: string
+      default: "persona-runs-token"
+  results:
+    - name: run-id
+      value: $(tasks.credentials.results.run-id)
+    - name: report-url
+      value: $(tasks.publish.results.report-url)
+  tasks:
+    - name: credentials
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          # self-reference on main while drafting; pin to a tag on release
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/persona-credentials.yaml
+      workspaces:
+        - name: credentials
+          workspace: shared-workspace
+          subPath: credentials
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: PERSONA
+          value: $(params.persona)
+        - name: SCENARIO
+          value: $(params.scenario)
+        - name: LAB
+          value: $(params.lab)
+        - name: ALLOW_HUMAN_MERGE
+          value: $(params.allowHumanMerge)
+        - name: VAULT_KV_MOUNT
+          value: $(params.vaultKvMount)
+        - name: SSH_CA_MOUNT
+          value: $(params.sshCaMount)
+        - name: RUNNER_IMAGE
+          value: $(params.runnerImage)
+        - name: vault-secret-name
+          value: $(params.vaultSecretName)
+
+    - name: run
+      runAfter:
+        - credentials
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/persona-run.yaml
+      workspaces:
+        - name: credentials
+          workspace: shared-workspace
+          subPath: credentials
+        - name: output
+          workspace: shared-workspace
+          subPath: runs
+        - name: ca-certs
+          workspace: caCerts
+      params:
+        - name: PERSONA
+          value: $(params.persona)
+        - name: SCENARIO
+          value: $(params.scenario)
+        - name: RUN_ID
+          value: $(tasks.credentials.results.run-id)
+        - name: LAB
+          value: $(params.lab)
+        - name: CLAIM_API_URL
+          value: $(params.claimApiUrl)
+        - name: ORDER_API_URL
+          value: $(params.orderApiUrl)
+        - name: RUNNER_IMAGE
+          value: $(params.runnerImage)
+        - name: anthropic-secret-name
+          value: $(params.anthropicSecretName)
+
+    - name: publish
+      runAfter:
+        - run
+      when:
+        - input: $(params.runsRepo)
+          operator: notin
+          values: [""]
+      taskRef:
+        resolver: git
+        params:
+          - name: url
+            value: https://github.com/stuttgart-things/stage-time.git
+          - name: revision
+            value: main
+          - name: pathInRepo
+            value: tasks/persona-publish.yaml
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+          subPath: runs
+      params:
+        - name: RUN_ID
+          value: $(tasks.credentials.results.run-id)
+        - name: RUNS_REPO
+          value: $(params.runsRepo)
+        - name: AI_PERSONAS_REVISION
+          value: $(params.aiPersonasRevision)
+        - name: git-token-secret-name
+          value: $(params.runsRepoTokenSecretName)
+
+  finally:
+    # The token must not outlive a run that failed before persona-run took it.
+    - name: wipe-credentials
+      workspaces:
+        - name: credentials
+          workspace: shared-workspace
+          subPath: credentials
+      params:
+        - name: image
+          value: $(params.runnerImage)
+      taskSpec:
+        workspaces:
+          - name: credentials
+        params:
+          - name: image
+            type: string
+        steps:
+          - name: wipe
+            image: $(params.image)
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 10001
+              allowPrivilegeEscalation: false
+            env:
+              - name: CRED_DIR
+                value: $(workspaces.credentials.path)
+            script: |
+              #!/usr/bin/env bash
+              set -eu
+              rm -rf "${CRED_DIR:?}"/persona-token "${CRED_DIR:?}"/ssh
+              echo "credentials wiped"

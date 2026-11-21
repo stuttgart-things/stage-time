@@ -1,0 +1,115 @@
+---
+# persona-publish -- third of the three persona-run tasks (stuttgart-things/ai-personas).
+#
+# Files the run's report in the private runs repo with ai-personas'
+# runner/publish-run (ADR 0005): runs/<scenario>/<time>-<persona>/ plus the
+# regenerated indexes, pushed straight to main, retried on a concurrent push.
+#
+# Its own pod: the git token never shares a pod with the persona, and the run
+# pod needs no egress to GitHub. Only reached when persona-run succeeded, i.e.
+# the run passed its leak check.
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: persona-publish
+  labels:
+    app.kubernetes.io/version: "0.1"
+  annotations:
+    tekton.dev/categories: "testing"
+    tekton.dev/tags: "ai-personas,git"
+spec:
+  description: >-
+    Push one persona run's report (output/<RUN_ID>) into the private runs repo
+    and regenerate its indexes, using ai-personas' runner/publish-run.
+  workspaces:
+    - name: output
+      description: holds <RUN_ID>/ from persona-run
+  params:
+    - name: RUN_ID
+      type: string
+    - name: RUNS_REPO
+      type: string
+      description: owner/repo of the private runs repo (github.com)
+    - name: AI_PERSONAS_URL
+      type: string
+      default: "https://github.com/stuttgart-things/ai-personas.git"
+    - name: AI_PERSONAS_REVISION
+      type: string
+      default: "main"
+      description: >-
+        branch, tag or commit of ai-personas whose publish-run/runs-index are
+        used. Pin it to the same revision the runner image was built from.
+    - name: GIT_USER_NAME
+      type: string
+      default: "stuttgart-things"
+    - name: GIT_USER_EMAIL
+      type: string
+      default: "noreply@stuttgart-things.com"
+    - name: git-token-secret-name
+      type: string
+      default: "persona-runs-token"
+      description: Secret with a token that may push to RUNS_REPO (contents write)
+    - name: git-token-secret-key
+      type: string
+      default: "token"
+    - name: WORKING_IMAGE
+      type: string
+      default: "ghcr.io/stuttgart-things/sthings-packer:2.0.0"
+      description: needs bash, git, jq, find, awk
+  results:
+    - name: report-url
+      description: link to the run's transcript.md in the runs repo
+  steps:
+    - name: publish
+      image: "$(params.WORKING_IMAGE)"
+      env:
+        - name: RUN_DIR
+          value: $(workspaces.output.path)/$(params.RUN_ID)
+        - name: RUNS_REPO
+          value: $(params.RUNS_REPO)
+        - name: AI_PERSONAS_URL
+          value: $(params.AI_PERSONAS_URL)
+        - name: AI_PERSONAS_REVISION
+          value: $(params.AI_PERSONAS_REVISION)
+        - name: GIT_USER_NAME
+          value: $(params.GIT_USER_NAME)
+        - name: GIT_USER_EMAIL
+          value: $(params.GIT_USER_EMAIL)
+        - name: HOME
+          value: /tmp/publish-home
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: $(params.git-token-secret-name)
+              key: $(params.git-token-secret-key)
+      computeResources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+      script: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        umask 077
+        mkdir -p "$HOME"
+        [ -s "$RUN_DIR/summary.json" ] || { echo "no report in $RUN_DIR" >&2; exit 1; }
+
+        # Credential via the store helper (as in promote-config-pr): not in a
+        # remote URL, not in argv.
+        git config --global credential.helper store
+        printf 'protocol=https\nhost=github.com\nusername=x-access-token\npassword=%s\n\n' "$GIT_TOKEN" \
+          | git credential approve
+        unset GIT_TOKEN
+        git config --global user.name "$GIT_USER_NAME"
+        git config --global user.email "$GIT_USER_EMAIL"
+        git config --global advice.detachedHead false
+
+        # publish-run and runs-index at the pinned revision (works for a
+        # branch, a tag or a commit).
+        src=$(mktemp -d)
+        git -C "$src" init -q
+        git -C "$src" fetch -q --depth 1 "$AI_PERSONAS_URL" "$AI_PERSONAS_REVISION"
+        git -C "$src" checkout -q FETCH_HEAD
+
+        "$src/runner/publish-run" "$RUN_DIR" "$RUNS_REPO" | tee /tmp/publish.log
+        sed -n 's/^publish-run: \(https:.*\)$/\1/p' /tmp/publish.log | head -1 | tr -d '\n' \
+          > "$(results.report-url.path)"
