@@ -296,6 +296,123 @@ EOF
 
 </details>
 
+<details><summary>EXECUTE AI-PERSONA RUN (stuttgart-things/ai-personas)</summary>
+
+One persona × scenario × lab: `claude -p` in the ai-personas runner image with only the persona's short-lived ZITADEL token. Three pods (`tasks/persona-credentials.yaml`, `tasks/persona-run.yaml`, `tasks/persona-publish.yaml`), so the claude pod never holds Vault or git credentials and can get a narrow egress policy. Only `merge: auto` scenarios by default (`allowHumanMerge: "true"` overrides).
+
+| Pipeline task | Task file | Image | Secrets | Egress | Does |
+| --- | --- | --- | --- | --- | --- |
+| `credentials` | `tasks/persona-credentials.yaml` | runner | `vault` (AppRole) | Vault, ZITADEL | checks persona and scenario (`merge: auto`, ssh or not), sets the run id; AppRole login → the persona's client credentials → short-lived ZITADEL token; for ssh scenarios a throwaway key signed by the Vault SSH CA; writes both to `credentials/`, revokes the Vault token |
+| `run` | `tasks/persona-run.yaml` | runner | `anthropic` | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume, then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; leak check at the end (exit 3, nothing published) |
+| `publish` | `tasks/persona-publish.yaml` | sthings-packer (git, jq) | `persona-runs-token` | github.com | `publish-run` from ai-personas at `aiPersonasRevision`: report to `runs/<scenario>/<time>-<persona>/` in the private runs repo, indexes regenerated; skipped when `runsRepo` is empty |
+| `wipe-credentials` (finally) | inline | runner | – | – | deletes `credentials/` in any case |
+
+## SECRETS
+
+```bash
+# Vault AppRole: read on ai-personas/data/<lab>/*, update on <sshCaMount>/sign/persona-*
+kubectl -n tekton-ci create secret generic vault \
+  --from-literal=VAULT_ADDR=https://vault.example.com \
+  --from-literal=VAULT_ROLE_ID=<role-id> \
+  --from-literal=VAULT_SECRET_ID=<secret-id>
+
+# Anthropic API key (no subscription token in shared CI)
+kubectl -n tekton-ci create secret generic anthropic --from-literal=ANTHROPIC_API_KEY=<key>
+
+# token with contents:write on the private runs repo
+kubectl -n tekton-ci create secret generic persona-runs-token --from-literal=token=<token>
+
+# the lab's root CA, key must be ca.pem
+kubectl -n tekton-ci create configmap lab-ca --from-file=ca.pem=<root-ca.pem>
+```
+
+## PIPELINERUN
+
+```bash
+kubectl create -f - <<EOF
+---
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: persona-developer-
+  namespace: tekton-ci
+spec:
+  pipelineRef:
+    resolver: git
+    params:
+      - name: url
+        value: https://github.com/stuttgart-things/stage-time.git
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: pipelines/execute-persona-run.yaml
+  timeouts:
+    pipeline: 1h30m   # order + build + ssh check; the scenario's ttl is 1h
+  taskRunTemplate:
+    podTemplate:
+      securityContext:
+        fsGroup: 10001   # the runner image's persona uid writes the volume
+  workspaces:
+    - name: shared-workspace
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          resources:
+            requests:
+              storage: 50Mi
+          storageClassName: openebs-hostpath
+    - name: caCerts
+      configMap:
+        name: lab-ca
+  params:
+    - name: persona
+      value: developer
+    - name: scenario
+      value: verify-vm-ssh-auto
+    - name: lab
+      value: labul
+    - name: claimApiUrl
+      value: https://claim-api.example.com
+    - name: orderApiUrl
+      value: https://orders.example.com
+    - name: runsRepo
+      value: <owner>/<private-runs-repo>
+    - name: runnerImage
+      value: <registry>/ai-personas-runner:<tag>
+EOF
+```
+
+## NETWORKPOLICY FOR THE CLAUDE POD
+
+The `run` pod carries the label `tekton.dev/pipelineTask: run`. NetworkPolicies match IPs, not hostnames: fill in the CIDRs of the lab services and the Anthropic API's published ranges.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: persona-run-egress
+  namespace: tekton-ci
+spec:
+  podSelector:
+    matchLabels:
+      tekton.dev/pipeline: execute-persona-run
+      tekton.dev/pipelineTask: run
+  policyTypes: [Egress]
+  egress:
+    - ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]
+    - to:   # claim-machinery-api, machinery-order-service, ZITADEL
+        - ipBlock: {cidr: <lab-ingress-cidr>}
+      ports: [{port: 443, protocol: TCP}]
+    - to:   # Anthropic API
+        - ipBlock: {cidr: <anthropic-api-cidr>}
+      ports: [{port: 443, protocol: TCP}]
+    - to:   # only for ssh scenarios: the lab's VM network
+        - ipBlock: {cidr: <lab-vm-cidr>}
+      ports: [{port: 22, protocol: TCP}]
+```
+
+</details>
+
 ## DEV
 
 <details><summary>TEST CHART w/ VCLUSTER</summary>
