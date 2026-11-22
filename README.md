@@ -303,9 +303,9 @@ One persona × scenario × lab: `claude -p` in the ai-personas runner image with
 | Pipeline task | Task file | Image | Secrets | Egress | Does |
 | --- | --- | --- | --- | --- | --- |
 | `credentials` | `tasks/persona-credentials.yaml` | runner | `vault-ai-personas-runner` (AppRole) | Vault, ZITADEL | checks persona and scenario (`merge: auto`, ssh or not), sets the run id; AppRole login → the persona's client credentials → short-lived ZITADEL token; for ssh scenarios a throwaway key signed by the Vault SSH CA; writes both to `credentials/`, revokes the Vault token |
-| `run` | `tasks/persona-run.yaml` | runner | `anthropic` (API key or Claude Code OAuth token) | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume, then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; leak check at the end (exit 3, nothing published) |
+| `run` | `tasks/persona-run.yaml` | runner | `anthropic` (API key or Claude Code OAuth token) | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume; `egress-check`: the Vault from `credentials` and `egressDenied` (GitHub) must be unreachable, else no run; then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; afterwards the runner tears down what the persona ordered (`cleanup: delete-claim`, ai-personas ADR 0007); leak check at the end (exit 3, nothing published) |
 | `publish` | `tasks/persona-publish.yaml` | sthings-packer (git, jq) | `persona-runs-token` | github.com | `publish-run` from ai-personas at `aiPersonasRevision`: report to `runs/<scenario>/<time>-<persona>/` in the private runs repo, indexes regenerated; skipped when `runsRepo` is empty |
-| `wipe-credentials` (finally) | inline | runner | – | – | deletes `credentials/` in any case |
+| `wipe-credentials` (finally) | inline | runner | – | – | deletes `credentials/` in any case and fails if anything is left |
 
 ## SECRETS
 
@@ -349,7 +349,7 @@ spec:
       - name: pathInRepo
         value: pipelines/execute-persona-run.yaml
   timeouts:
-    pipeline: 1h30m   # order + build + ssh check; the scenario's ttl is 1h
+    pipeline: 2h30m   # order + build + ssh check, then the runner's teardown (up to 45 min)
   taskRunTemplate:
     podTemplate:
       securityContext:
