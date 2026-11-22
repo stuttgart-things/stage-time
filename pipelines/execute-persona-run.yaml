@@ -59,6 +59,12 @@ spec:
       type: string
       default: ""
       description: owner/repo of the private runs repo; empty skips publishing
+    - name: egressDenied
+      type: string
+      default: "https://github.com https://api.github.com"
+      description: >-
+        URLs the run pod must not reach, checked before claude starts; the
+        Vault the credentials task used is always added
     # ---- images / revisions ----
     - name: runnerImage
       type: string
@@ -154,6 +160,8 @@ spec:
           value: $(params.orderApiUrl)
         - name: RUNNER_IMAGE
           value: $(params.runnerImage)
+        - name: EGRESS_DENIED
+          value: $(tasks.credentials.results.vault-addr) $(params.egressDenied)
         - name: anthropic-secret-name
           value: $(params.anthropicSecretName)
 
@@ -189,6 +197,8 @@ spec:
 
   finally:
     # The token must not outlive a run that failed before persona-run took it.
+    # The step fails when anything is left on the credentials subPath, so a
+    # failed run shows it (ai-personas ADR 0006).
     - name: wipe-credentials
       workspaces:
         - name: credentials
@@ -217,4 +227,10 @@ spec:
               #!/usr/bin/env bash
               set -eu
               rm -rf "${CRED_DIR:?}"/persona-token "${CRED_DIR:?}"/ssh
-              echo "credentials wiped"
+              left=$(find "$CRED_DIR" -mindepth 1 | wc -l)
+              if [ "$left" -ne 0 ]; then
+                echo "credentials/ not empty after the wipe: $left entr(y/ies)" >&2
+                find "$CRED_DIR" -mindepth 1 -printf '%P\n' >&2   # names only
+                exit 1
+              fi
+              echo "credentials wiped, credentials/ is empty"

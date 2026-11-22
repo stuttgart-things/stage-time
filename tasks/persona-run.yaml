@@ -16,7 +16,10 @@
 #
 # This pod should get a NetworkPolicy (label tekton.dev/pipelineTask=run):
 # egress only to DNS, claim-machinery-api, machinery-order-service, ZITADEL,
-# the Anthropic API and -- for ssh scenarios -- the lab's VM network.
+# the Anthropic API and -- for ssh scenarios -- the lab's VM network. The
+# egress-check step proves the negative before claude starts: every URL in
+# EGRESS_DENIED (Vault, GitHub) must be unreachable from this pod, otherwise
+# the task fails and no persona runs (ai-personas ADR 0006).
 apiVersion: tekton.dev/v1
 kind: Task
 metadata:
@@ -59,6 +62,12 @@ spec:
     - name: RUNNER_IMAGE
       type: string
       description: the ai-personas runner image
+    - name: EGRESS_DENIED
+      type: string
+      default: ""
+      description: >-
+        space-separated URLs this pod must not reach (e.g. the Vault address
+        and https://github.com); empty skips the check
     - name: anthropic-secret-name
       type: string
       default: "anthropic"
@@ -107,6 +116,31 @@ spec:
         fi
         # Off the volume before the persona exists.
         rm -rf "${CRED_DIR:?}"/persona-token "${CRED_DIR:?}"/ssh
+
+    - name: egress-check
+      env:
+        - name: EGRESS_DENIED
+          value: $(params.EGRESS_DENIED)
+      computeResources:
+        requests:
+          cpu: 10m
+          memory: 16Mi
+      script: |
+        #!/usr/bin/env bash
+        # Blocked = no connection at all: curl 6 (no DNS answer), 7 (refused),
+        # 28 (timeout; the policy drops the packets). Anything else, a TLS
+        # error included, means a TCP connection got through.
+        set -uo pipefail
+        [ -n "${EGRESS_DENIED// }" ] || { echo "egress check skipped (EGRESS_DENIED empty)"; exit 0; }
+        bad=0
+        for u in $EGRESS_DENIED; do
+          curl -sS -o /dev/null --connect-timeout 5 --max-time 8 "$u" 2>/dev/null; rc=$?
+          case $rc in
+            6|7|28) echo "blocked: $u (curl $rc)" ;;
+            *) echo "REACHABLE: $u (curl $rc)" >&2; bad=1 ;;
+          esac
+        done
+        [ $bad -eq 0 ] || { echo "this pod reaches what it must not; no persona run" >&2; exit 1; }
 
     - name: run
       env:
