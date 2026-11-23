@@ -345,7 +345,7 @@ spec:
       - name: url
         value: https://github.com/stuttgart-things/stage-time.git
       - name: revision
-        value: main
+        value: v0.13.12
       - name: pathInRepo
         value: pipelines/execute-persona-run.yaml
   timeouts:
