@@ -309,6 +309,13 @@ One persona × scenario × lab: `claude -p` in the ai-personas runner image with
 
 ## SECRETS
 
+The commands below show what the pipeline expects, for a first try by hand. For a lab you keep running, put all of it in Git instead, next to the cluster's other state:
+- the Vault AppRole and its policy as Terraform;
+- the Secrets SOPS-encrypted, applied by an operator (e.g. sops-secrets-operator);
+- the CA ConfigMap and the egress policy as plain manifests in the cluster's Flux/Argo path.
+
+No step of the pipeline needs anything created by hand. The Claude credential is the one personal piece: `claude setup-token` is bound to one person's subscription. Regular runs need an API key with a spend limit.
+
 ```bash
 # Vault AppRole: read on ai-personas/data/<lab>/*, update on <sshCaMount>/sign/persona-*
 kubectl -n tekton-ci create secret generic vault-ai-personas-runner \
@@ -389,6 +396,26 @@ EOF
 ## NETWORKPOLICY FOR THE CLAUDE POD
 
 The `run` pod carries the label `tekton.dev/pipelineTask: run`. NetworkPolicies match IPs, not hostnames: fill in the CIDRs of the lab services and the Anthropic API's published ranges.
+
+**If a lab service is served by the Gateway/Ingress of the same cluster, and the CNI is Cilium:** use a `CiliumNetworkPolicy` with `toFQDNs` (plus a DNS rule on kube-dns with `dns: [{matchPattern: "*"}]`) instead of IP blocks. The policy also needs two more rules:
+- `toEntities: [ingress]` for the Gateway itself;
+- egress `toEndpoints` to the **backend pods** behind the route, on their container port.
+
+Cilium's Gateway Envoy checks the client's egress policy a second time, against the backend it routes to. Without the backend rule the connection to the Gateway goes through, but every request gets `403 Access denied` from Envoy, even `/health`. It looks like an authorization problem of the service, which it is not.
+
+```yaml
+# Cilium variant, the part that differs (claim-machinery-api behind the cluster's own Gateway)
+  egress:
+    - toEntities: [ingress]
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: claim-machinery
+            app.kubernetes.io/name: claim-machinery-api
+      toPorts:
+        - ports: [{port: "8080", protocol: TCP}]
+```
+
+Before the persona starts, the `run` task's `egress-check` step checks that Vault and `egressDenied` are not reachable. That covers the negative side. Whether the allowed services work only shows in a run: check its report for 403s on `claims templates` / `claims clusters`.
 
 ```yaml
 apiVersion: networking.k8s.io/v1
