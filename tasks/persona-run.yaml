@@ -62,6 +62,13 @@ spec:
     - name: RUNNER_IMAGE
       type: string
       description: the ai-personas runner image
+    - name: MANAGEMENT_CLUSTER
+      type: string
+      default: ""
+      description: >-
+        the management cluster the persona orders on (claims order --cluster)
+        and the runner's verdict checks; empty lets the persona pick, as before
+        (stuttgart-things/stuttgart-things#4828)
     - name: EGRESS_DENIED
       type: string
       default: ""
@@ -156,6 +163,8 @@ spec:
           value: $(params.CLAIM_API_URL)
         - name: CLAIM_ORDERS_URL
           value: $(params.ORDER_API_URL)
+        - name: MANAGEMENT_CLUSTER
+          value: $(params.MANAGEMENT_CLUSTER)
         - name: OUT_DIR
           value: $(workspaces.output.path)
         - name: HOME
