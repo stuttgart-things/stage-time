@@ -95,9 +95,8 @@ spec:
         params:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
-          # self-reference on main while drafting; pin to a tag on release
           - name: revision
-            value: main
+            value: v0.13.11
           - name: pathInRepo
             value: tasks/persona-credentials.yaml
       workspaces:
@@ -133,7 +132,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: main
+            value: v0.13.11
           - name: pathInRepo
             value: tasks/persona-run.yaml
       workspaces:
@@ -178,7 +177,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: main
+            value: v0.13.11
           - name: pathInRepo
             value: tasks/persona-publish.yaml
       workspaces:
