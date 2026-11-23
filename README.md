@@ -305,6 +305,7 @@ One persona × scenario × lab: `claude -p` in the ai-personas runner image with
 | `credentials` | `tasks/persona-credentials.yaml` | runner | `vault-ai-personas-runner` (AppRole) | Vault, ZITADEL | checks persona and scenario (`merge: auto`, ssh or not), sets the run id; AppRole login → the persona's client credentials → short-lived ZITADEL token; for ssh scenarios a throwaway key signed by the Vault SSH CA; writes both to `credentials/`, revokes the Vault token |
 | `run` | `tasks/persona-run.yaml` | runner | `anthropic` (API key or Claude Code OAuth token) | claim-machinery-api, order service, ZITADEL, Anthropic API (+ VMs on 22 for ssh) | moves token and key into memory and wipes them from the volume; `egress-check`: the Vault from `credentials` and `egressDenied` (GitHub) must be unreachable, else no run; then runs the image's unchanged `persona-run`: `claude -p` with only the persona's token; afterwards the runner tears down what the persona ordered (`cleanup: delete-claim`, ai-personas ADR 0007); leak check at the end (exit 3, nothing published) |
 | `publish` | `tasks/persona-publish.yaml` | sthings-packer (git, jq) | `persona-runs-token` | github.com | `publish-run` from ai-personas at `aiPersonasRevision`: report to `runs/<scenario>/<time>-<persona>/` in the private runs repo, indexes regenerated; skipped when `runsRepo` is empty |
+| `verdict` | inline | runner | – | – | only with `verifyStrict: "true"`, after `publish`: prints the runner's `verdict.json` (ai-personas `persona-verdict`) and fails the pipeline unless it passed -- a gate, e.g. Kargo's verification on machinery-dev (stuttgart-things#4828); pipeline result `verdict` |
 | `wipe-credentials` (finally) | inline | runner | – | – | deletes `credentials/` in any case and fails if anything is left |
 
 ## SECRETS
@@ -352,7 +353,7 @@ spec:
       - name: url
         value: https://github.com/stuttgart-things/stage-time.git
       - name: revision
-        value: v0.13.12
+        value: v0.13.13
       - name: pathInRepo
         value: pipelines/execute-persona-run.yaml
   timeouts:
@@ -384,6 +385,10 @@ spec:
       value: https://claim-api.example.com
     - name: orderApiUrl
       value: https://orders.example.com
+    - name: managementCluster   # where the lab has several (v0.13.13+)
+      value: machinery-dev
+    - name: verifyStrict        # fail the pipeline unless the runner's verdict passed (v0.13.13+)
+      value: "true"
     - name: runsRepo
       value: <owner>/<private-runs-repo>
     - name: runnerImage   # tag = ai-personas commit

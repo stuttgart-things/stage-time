@@ -49,6 +49,13 @@ spec:
       type: string
     - name: orderApiUrl
       type: string
+    - name: managementCluster
+      type: string
+      default: ""
+      description: >-
+        the management cluster to order on; needed where the lab has several
+        (LabUL: machinery-labul and the staging cluster machinery-dev).
+        Empty lets the persona pick.
     - name: sshCaMount
       type: string
       default: "ssh-client-signer"
@@ -83,11 +90,22 @@ spec:
     - name: runsRepoTokenSecretName
       type: string
       default: "persona-runs-token"
+    # ---- gate ----
+    - name: verifyStrict
+      type: string
+      default: "false"
+      description: >-
+        "true" fails the pipeline when the runner's verdict (verdict.json) is
+        not passed -- for a gate (Kargo verification on machinery-dev,
+        stuttgart-things/stuttgart-things#4828). The run is published either
+        way. Needs a runner image with persona-verdict (ai-personas#39).
   results:
     - name: run-id
       value: $(tasks.credentials.results.run-id)
     - name: report-url
       value: $(tasks.publish.results.report-url)
+    - name: verdict
+      value: $(tasks.verdict.results.passed)
   tasks:
     - name: credentials
       taskRef:
@@ -96,7 +114,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.13.11
+            value: v0.13.13
           - name: pathInRepo
             value: tasks/persona-credentials.yaml
       workspaces:
@@ -132,7 +150,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.13.11
+            value: v0.13.13
           - name: pathInRepo
             value: tasks/persona-run.yaml
       workspaces:
@@ -159,6 +177,8 @@ spec:
           value: $(params.orderApiUrl)
         - name: RUNNER_IMAGE
           value: $(params.runnerImage)
+        - name: MANAGEMENT_CLUSTER
+          value: $(params.managementCluster)
         - name: EGRESS_DENIED
           value: $(tasks.credentials.results.vault-addr) $(params.egressDenied)
         - name: anthropic-secret-name
@@ -177,7 +197,7 @@ spec:
           - name: url
             value: https://github.com/stuttgart-things/stage-time.git
           - name: revision
-            value: v0.13.11
+            value: v0.13.13
           - name: pathInRepo
             value: tasks/persona-publish.yaml
       workspaces:
@@ -193,6 +213,59 @@ spec:
           value: $(params.aiPersonasRevision)
         - name: git-token-secret-name
           value: $(params.runsRepoTokenSecretName)
+
+    # The gate: after publish, so a failed run is still filed. A task skipped by
+    # `when` (publish without runsRepo) does not skip this one.
+    - name: verdict
+      runAfter:
+        - publish
+      when:
+        - input: $(params.verifyStrict)
+          operator: in
+          values: ["true"]
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+          subPath: runs
+      params:
+        - name: RUN_ID
+          value: $(tasks.credentials.results.run-id)
+        - name: image
+          value: $(params.runnerImage)
+      taskSpec:
+        workspaces:
+          - name: output
+        params:
+          - name: RUN_ID
+            type: string
+          - name: image
+            type: string
+        results:
+          - name: passed
+            description: '"true" or "false"'
+        steps:
+          - name: verdict
+            image: $(params.image)
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 10001
+              allowPrivilegeEscalation: false
+            env:
+              - name: RUN_DIR
+                value: $(workspaces.output.path)/$(params.RUN_ID)
+            script: |
+              #!/usr/bin/env bash
+              set -eu
+              v="$RUN_DIR/verdict.json"
+              if [ ! -s "$v" ]; then
+                echo "no verdict.json in $RUN_DIR -- runner image without persona-verdict?" >&2
+                printf false > "$(results.passed.path)"; exit 1
+              fi
+              jq -r '.checks[] | "\(if .ok == true then "ok  " elif .ok == false then "FAIL" else "--  " end) \(.kind)\t\(.name)\t\(.detail)"' "$v"
+              passed=$(jq -r '.passed' "$v")
+              printf '%s' "$passed" > "$(results.passed.path)"
+              [ "$passed" = true ] || { echo "verdict: FAILED" >&2; exit 1; }
+              echo "verdict: passed"
 
   finally:
     # The token must not outlive a run that failed before persona-run took it.
