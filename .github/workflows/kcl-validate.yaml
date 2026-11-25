@@ -25,7 +25,7 @@ jobs:
           - kcl/packer
     # NOTE: requires call-kcl-validate.yaml to be merged into
     # github-workflow-templates' main branch first.
-    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-kcl-validate.yaml@main
+    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-kcl-validate.yaml@15bb803fd72658fda50120f8a566d5594061e6ee # v1.2.0
     with:
       module-dir: ${{ matrix.module-dir }}
     secrets: inherit # pragma: allowlist secret
