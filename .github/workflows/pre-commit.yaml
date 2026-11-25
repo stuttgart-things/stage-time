@@ -15,7 +15,7 @@ permissions:
 jobs:
   pre-commit:
     name: Pre-commit Hooks
-    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-pre-commit.yaml@main
+    uses: stuttgart-things/github-workflow-templates/.github/workflows/call-pre-commit.yaml@15bb803fd72658fda50120f8a566d5594061e6ee # v1.2.0
     with:
       config-path: .pre-commit-config.yaml
       # v0.119.0 bundles the hadolint static binary on PATH, so the local
